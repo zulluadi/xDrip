@@ -166,6 +166,34 @@
         <item>mmol</item>
     </string-array>
 
+    <string-array name="SpeechRecognitionLanguageEntries">
+        <item>System default</item>
+        <item>English</item>
+        <item>Romanian</item>
+        <item>Spanish</item>
+        <item>French</item>
+        <item>German</item>
+        <item>Italian</item>
+        <item>Portuguese</item>
+        <item>Dutch</item>
+        <item>Polish</item>
+        <item>Ukrainian</item>
+    </string-array>
+
+    <string-array name="SpeechRecognitionLanguageValues">
+        <item></item>
+        <item>en-US</item>
+        <item>ro-RO</item>
+        <item>es-ES</item>
+        <item>fr-FR</item>
+        <item>de-DE</item>
+        <item>it-IT</item>
+        <item>pt-PT</item>
+        <item>nl-NL</item>
+        <item>pl-PL</item>
+        <item>uk-UA</item>
+    </string-array>
+
     <!--     make sure to keep this values in sync with AlertPlayer.getAlertProfile -->
     <string-array name="BgAlertProfileEntries">
         <item>@string/volume_profile_high</item>

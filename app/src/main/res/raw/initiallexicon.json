@@ -31,7 +31,57 @@
         "unit",
         "u",
         "you"
-      ]
+      ],
+      "matchWordsByLanguage": {
+        "ro": [
+          "rapid",
+          "rapida",
+          "insulina",
+          "unitati",
+          "unitate",
+          "unități",
+          "u"
+        ],
+        "es": [
+          "rapida",
+          "rapido",
+          "rápida",
+          "rápido",
+          "insulina",
+          "unidades",
+          "unidad"
+        ],
+        "fr": [
+          "rapide",
+          "insuline",
+          "unites",
+          "unités",
+          "unite",
+          "unité"
+        ],
+        "de": [
+          "schnell",
+          "insulin",
+          "einheiten",
+          "einheit"
+        ],
+        "it": [
+          "rapida",
+          "rapido",
+          "insulina",
+          "unita",
+          "unità"
+        ],
+        "pt": [
+          "rapida",
+          "rapido",
+          "rápida",
+          "rápido",
+          "insulina",
+          "unidades",
+          "unidade"
+        ]
+      }
     },
     {
       "lexicon": "long",
@@ -54,7 +104,48 @@
         "car",
         "g",
         "gee"
-      ]
+      ],
+      "matchWordsByLanguage": {
+        "ro": [
+          "carbohidrati",
+          "carbohidrați",
+          "glucide",
+          "grame",
+          "gram",
+          "g"
+        ],
+        "es": [
+          "carbohidratos",
+          "hidratos",
+          "gramos",
+          "gramo",
+          "g"
+        ],
+        "fr": [
+          "glucides",
+          "grammes",
+          "gramme",
+          "g"
+        ],
+        "de": [
+          "kohlenhydrate",
+          "gramm",
+          "g"
+        ],
+        "it": [
+          "carboidrati",
+          "grammi",
+          "grammo",
+          "g"
+        ],
+        "pt": [
+          "carboidratos",
+          "hidratos",
+          "gramas",
+          "grama",
+          "g"
+        ]
+      }
     },
     {
       "lexicon": "time",
@@ -67,13 +158,71 @@
         "hour",
         "hours",
         "at"
-      ]
+      ],
+      "matchWordsByLanguage": {
+        "ro": [
+          "timp",
+          "ora",
+          "ore",
+          "la"
+        ],
+        "es": [
+          "hora",
+          "tiempo",
+          "a"
+        ],
+        "fr": [
+          "heure",
+          "temps",
+          "a",
+          "à"
+        ],
+        "de": [
+          "zeit",
+          "uhr",
+          "um"
+        ],
+        "it": [
+          "ora",
+          "tempo",
+          "alle"
+        ],
+        "pt": [
+          "hora",
+          "tempo",
+          "as",
+          "às"
+        ]
+      }
     },
     {
       "lexicon": "ago",
       "matchWords": [
         "ago"
-      ]
+      ],
+      "matchWordsByLanguage": {
+        "ro": [
+          "acum",
+          "in urma",
+          "în urmă"
+        ],
+        "es": [
+          "hace"
+        ],
+        "fr": [
+          "il y a"
+        ],
+        "de": [
+          "vor"
+        ],
+        "it": [
+          "fa"
+        ],
+        "pt": [
+          "ha",
+          "há"
+        ]
+      }
     },
     {
       "lexicon": "blood",
@@ -100,7 +249,67 @@
         "blood sugar",
         "hottest",
         "obsessed"
-      ]
+      ],
+      "matchWordsByLanguage": {
+        "ro": [
+          "glicemie",
+          "glucoza",
+          "glucoză",
+          "zahar",
+          "zahăr",
+          "sange",
+          "sânge",
+          "test",
+          "mg",
+          "mmol"
+        ],
+        "es": [
+          "glucosa",
+          "azucar",
+          "azúcar",
+          "sangre",
+          "test",
+          "mg",
+          "mmol"
+        ],
+        "fr": [
+          "glycemie",
+          "glycémie",
+          "glucose",
+          "sucre",
+          "sang",
+          "test",
+          "mg",
+          "mmol"
+        ],
+        "de": [
+          "blutzucker",
+          "zucker",
+          "blut",
+          "test",
+          "mg",
+          "mmol"
+        ],
+        "it": [
+          "glicemia",
+          "glucosio",
+          "zucchero",
+          "sangue",
+          "test",
+          "mg",
+          "mmol"
+        ],
+        "pt": [
+          "glicemia",
+          "glicose",
+          "acucar",
+          "açúcar",
+          "sangue",
+          "teste",
+          "mg",
+          "mmol"
+        ]
+      }
     },
     {
       "lexicon": "grams",
@@ -118,7 +327,35 @@
         "note",
         "notes",
         "night"
-      ]
+      ],
+      "matchWordsByLanguage": {
+        "ro": [
+          "nota",
+          "notă",
+          "notite",
+          "notițe"
+        ],
+        "es": [
+          "nota",
+          "notas"
+        ],
+        "fr": [
+          "note",
+          "notes"
+        ],
+        "de": [
+          "notiz",
+          "notizen"
+        ],
+        "it": [
+          "nota",
+          "note"
+        ],
+        "pt": [
+          "nota",
+          "notas"
+        ]
+      }
     }
   ]
 }
