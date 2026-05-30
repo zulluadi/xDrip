@@ -183,8 +183,11 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -261,6 +264,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
     private static final int REQ_CODE_SPEECH_INPUT = 1994;
     private static final int REQ_CODE_SPEECH_NOTE_INPUT = 1995;
     private static final int REQ_CODE_BATTERY_OPTIMIZATION = 1996;
+    private static final String SPEECH_LANGUAGE_STORE = "speech-recognition-language";
     private static final int SHOWCASE_UNDO = 4;
     private static final int SHOWCASE_REDO = 5;
     private static final int SHOWCASE_NOTE_LONG = 6;
@@ -314,6 +318,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
     boolean watchkeypadset = false;
     long watchkeypad_timestamp = -1;
     private wordDataWrapper searchWords = null;
+    private String activeSpeechLanguageCode = "";
     public AlertDialog dialog;
     private AlertDialog helper_dialog;
     private AlertDialog status_helper_dialog;
@@ -1266,18 +1271,17 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
     public void promptSpeechNoteInput(View abc) {
 
         if (recognitionRunning) return;
-        recognitionRunning = true;
+        startSpeechRecognition(REQ_CODE_SPEECH_NOTE_INPUT, R.string.speak_your_note_text);
+    }
 
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        // intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US"); // debug voice
+    private void startSpeechRecognition(final int requestCode, final int promptStringId) {
+        recognitionRunning = true;
+        Intent intent = getSpeechRecognitionIntent();
         intent.putExtra(RecognizerIntent.EXTRA_PROMPT,
-                getString(R.string.speak_your_note_text));
+                getString(promptStringId));
 
         try {
-            startActivityForResult(intent, REQ_CODE_SPEECH_NOTE_INPUT);
+            startActivityForResult(intent, requestCode);
         } catch (ActivityNotFoundException a) {
             Toast.makeText(getApplicationContext(),
                     getString(R.string.speech_recognition_is_not_supported),
@@ -1346,24 +1350,38 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
 
         if (JoH.ratelimit("speech-input", 1)) {
             if (recognitionRunning) return;
-            recognitionRunning = true;
-
-            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-            // intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US"); // debug voice
-            intent.putExtra(RecognizerIntent.EXTRA_PROMPT,
-                    getString(R.string.speak_your_treatment));
-
-            try {
-                startActivityForResult(intent, REQ_CODE_SPEECH_INPUT);
-            } catch (ActivityNotFoundException a) {
-                Toast.makeText(getApplicationContext(),
-                        R.string.speech_recognition_is_not_supported,
-                        Toast.LENGTH_LONG).show();
-            }
+            startSpeechRecognition(REQ_CODE_SPEECH_INPUT, R.string.speak_your_treatment);
         }
+    }
+
+    private Intent getSpeechRecognitionIntent() {
+        final Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, getSpeechRecognitionLanguageTag());
+        // intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US"); // debug voice
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            intent.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true);
+            intent.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,
+                    RecognizerIntent.LANGUAGE_SWITCH_BALANCED);
+        }
+        return intent;
+    }
+
+    private String getSpeechRecognitionLanguageTag() {
+        final String languageTag = Pref.getString(SPEECH_LANGUAGE_STORE, "");
+        if (languageTag.length() > 0) {
+            return languageTag;
+        }
+        return Locale.getDefault().toLanguageTag();
+    }
+
+    private String getSpeechLanguageCode() {
+        final String languageTag = Pref.getString(SPEECH_LANGUAGE_STORE, "");
+        if (languageTag.length() > 0) {
+            return Locale.forLanguageTag(languageTag).getLanguage();
+        }
+        return Locale.getDefault().getLanguage();
     }
 
     private String classifyWord(String word) {
@@ -1372,7 +1390,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
         if (word.equals("uuid")) return "uuid";
         // convert fuzzy recognised word to our keyword from lexicon
         for (wordData thislex : searchWords.entries) {
-            if (thislex.matchWords.contains(word)) {
+            if (thislex.matches(word, activeSpeechLanguageCode)) {
                 Log.d(TAG, "Matched spoken word: " + word + " => " + thislex.lexicon);
                 return thislex.lexicon;
             }
@@ -1390,6 +1408,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             return;
         }
         Log.d(TAG, "Processing speech input allWords: " + allWords);
+        activeSpeechLanguageCode = getSpeechLanguageCode();
         thisuuid = "";
         int end = allWords.indexOf(" uuid ");
         if (end > 0) {
@@ -1406,6 +1425,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             allWords = allWords.replaceAll(new String(RTL_BYTES, StandardCharsets.UTF_8), "");
         }
         allWords = allWords.toLowerCase();
+        allWords = normalizeSpokenDecimalNumbers(allWords);
 
         Log.d(TAG, "Processing speech input allWords second: " + allWords + " UUID: " + thisuuid);
 
@@ -1451,11 +1471,18 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                 handleWordPair();
             } catch (NumberFormatException nfe) {
                 // detection of number or not
+                final Double spokenNumber = parseSpokenNumber(wordsArray[i]);
+                if (spokenNumber != null) {
+                    thisnumber = spokenNumber;
+                    handleWordPair();
+                    continue;
+                }
                 final String result = classifyWord(wordsArray[i]);
-                if (result != null)
+                if (result != null) {
                     thisword = result;
-                else
+                } else {
                     thisword = wordsArray[i].toLowerCase();  // if we can't translate the word make it lowercase to recognise it later
+                }
                 handleWordPair();
                 if (thisword.equals("note")) {
                     String note_text = "";
@@ -1472,6 +1499,158 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                 }
             }
         }
+        if (carbsset && thistreatmentnote.length() == 0) {
+            thistreatmentnote = extractCarbNote(wordsArray);
+            if (thistreatmentnote.length() > 0) {
+                Log.d(TAG, "Carb note from speech: " + thistreatmentnote);
+            }
+        }
+    }
+
+    private String extractCarbNote(final String[] wordsArray) {
+        for (int i = 0; i < wordsArray.length; i++) {
+            if (isNumericWord(wordsArray[i])) {
+                for (int j = i + 1; j < wordsArray.length; j++) {
+                    final String classified = classifyWord(wordsArray[j]);
+                    if ("carbs".equals(classified)) {
+                        return collectCarbNote(wordsArray, j + 1);
+                    }
+                    if (isTreatmentBoundary(wordsArray[j], classified) || isNumericWord(wordsArray[j])) {
+                        break;
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
+    private String collectCarbNote(final String[] wordsArray, int start) {
+        while (start < wordsArray.length && isCarbNotePrefix(wordsArray[start])) {
+            start++;
+        }
+
+        String note = "";
+        for (int i = start; i < wordsArray.length; i++) {
+            final String classified = classifyWord(wordsArray[i]);
+            if (isNumericWord(wordsArray[i]) || isTreatmentBoundary(wordsArray[i], classified)) {
+                break;
+            }
+            if (note.length() > 0) note += " ";
+            note += wordsArray[i];
+        }
+        return trimTrailingCarbNoteWords(note);
+    }
+
+    private boolean isCarbNotePrefix(final String word) {
+        final String classified = classifyWord(word);
+        return "carbs".equals(classified)
+                || "of".equals(word)
+                || "a".equals(word)
+                || "an".equals(word)
+                || "the".equals(word);
+    }
+
+    private boolean isTreatmentBoundary(final String word, final String classified) {
+        return "rapid".equals(classified)
+                || "blood".equals(classified)
+                || "time".equals(classified)
+                || "note".equals(classified)
+                || "watchkeypad".equals(classified)
+                || "uuid".equals(classified)
+                || "ago".equals(classified)
+                || (MultipleInsulins.isEnabled() && InsulinManager.getProfile(word) != null);
+    }
+
+    private boolean isNumericWord(final String word) {
+        try {
+            Double.parseDouble(word);
+            return true;
+        } catch (NumberFormatException e) {
+            return parseSpokenNumber(word) != null;
+        }
+    }
+
+    private Double parseSpokenNumber(final String word) {
+        switch (word) {
+            case "zero":
+            case "nul":
+                return 0d;
+            case "one":
+            case "unu":
+            case "un":
+            case "una":
+            case "o":
+                return 1d;
+            case "two":
+            case "doi":
+            case "doua":
+            case "două":
+                return 2d;
+            case "three":
+            case "trei":
+                return 3d;
+            case "four":
+            case "patru":
+                return 4d;
+            case "five":
+            case "cinci":
+                return 5d;
+            case "six":
+            case "sase":
+            case "șase":
+                return 6d;
+            case "seven":
+            case "sapte":
+            case "șapte":
+                return 7d;
+            case "eight":
+            case "opt":
+                return 8d;
+            case "nine":
+            case "noua":
+            case "nouă":
+                return 9d;
+            case "ten":
+            case "zece":
+                return 10d;
+            default:
+                return null;
+        }
+    }
+
+    private String normalizeSpokenDecimalNumbers(final String allWords) {
+        final String[] words = allWords.split(" ");
+        String normalized = "";
+        for (int i = 0; i < words.length; i++) {
+            final Double whole = parseSpokenNumber(words[i]);
+            if (whole != null && i + 2 < words.length && isSpokenDecimalSeparator(words[i + 1])) {
+                final Double fraction = parseSpokenNumber(words[i + 2]);
+                if (fraction != null && fraction >= 0 && fraction < 10) {
+                    if (normalized.length() > 0) normalized += " ";
+                    normalized += whole.intValue() + "." + fraction.intValue();
+                    i += 2;
+                    continue;
+                }
+            }
+            if (normalized.length() > 0) normalized += " ";
+            normalized += words[i];
+        }
+        return normalized;
+    }
+
+    private boolean isSpokenDecimalSeparator(final String word) {
+        return "virgula".equals(word)
+                || "virgulă".equals(word)
+                || "punct".equals(word)
+                || "point".equals(word)
+                || "dot".equals(word);
+    }
+
+    private String trimTrailingCarbNoteWords(String note) {
+        while (note.endsWith(" and") || note.endsWith(" with") || note.endsWith(" of")) {
+            note = note.substring(0, note.lastIndexOf(" ")).trim();
+        }
+        return note;
     }
 
     private void handleWordPair() {
@@ -1502,6 +1681,8 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                         textInsulinSumDose.setVisibility(View.VISIBLE);
                         if (!MultipleInsulins.isEnabled()) {
                             buttonInsulinSingleDose.setVisibility(View.VISIBLE); // show the button next to the single insulin dose if not using multiples
+                        } else {
+                            preserve = true;
                         }
                         insulinsumset = true;
                     } else {
@@ -1802,6 +1983,25 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
     class wordData {
         public String lexicon;
         public ArrayList<String> matchWords;
+        public Map<String, ArrayList<String>> matchWordsByLanguage;
+
+        boolean matches(final String word, final String languageCode) {
+            return getMatchWords(languageCode).contains(word);
+        }
+
+        private Set<String> getMatchWords(final String languageCode) {
+            final HashSet<String> words = new HashSet<>();
+            if (matchWords != null) {
+                words.addAll(matchWords);
+            }
+            if (matchWordsByLanguage != null) {
+                final ArrayList<String> languageWords = matchWordsByLanguage.get(languageCode);
+                if (languageWords != null) {
+                    words.addAll(languageWords);
+                }
+            }
+            return words;
+        }
     }
 
     /// jamorham end voiceinput methods
