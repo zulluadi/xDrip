@@ -175,6 +175,88 @@ public class NightscoutUploaderCallerTest extends RobolectricTestWithConfig {
     }
 
     @Test
+    public void uploadRest_buildsBloodTestEntryPayloadWithUuid() throws Exception {
+        // :: Setup
+        final long timestamp = 1700000000000L;
+        final String baseUrl = "http://" + SECRET + "@" + server.getHostName()
+                + ":" + server.getPort() + "/api/v1/";
+        prefs.edit()
+                .putBoolean("cloud_storage_api_enable", true)
+                .putString("cloud_storage_api_base", baseUrl)
+                .putBoolean("cloud_storage_api_download_enable", false)
+                .apply();
+
+        final BloodTest bloodTest = createBloodTest(123, timestamp, "bt-upload-uuid");
+
+        enqueueSuccessResponses(5);
+
+        final NightscoutUploader uploader = new NightscoutUploader(
+                org.robolectric.RuntimeEnvironment.application);
+
+        // :: Act
+        uploader.uploadRest(
+                Collections.emptyList(),
+                Collections.singletonList(bloodTest),
+                Collections.emptyList());
+
+        // :: Verify
+        final RecordedRequest entriesRequest = findRequestByPath("/api/v1/entries");
+        assertThat(entriesRequest).isNotNull();
+
+        final String body = decompressIfNeeded(entriesRequest);
+        final JSONArray arr = new JSONArray(body);
+        final JSONObject entry = arr.getJSONObject(0);
+        assertThat(entry.getString("type")).isEqualTo("mbg");
+        assertThat(entry.getLong("date")).isEqualTo(timestamp);
+        assertThat(entry.getDouble("mbg")).isEqualTo(123);
+        assertThat(entry.getString("uuid")).isEqualTo("bt-upload-uuid");
+    }
+
+    @Test
+    public void uploadRest_deletesBloodTestEntryByUuid() throws Exception {
+        // :: Setup
+        final String baseUrl = "http://" + SECRET + "@" + server.getHostName()
+                + ":" + server.getPort() + "/api/v1/";
+        prefs.edit()
+                .putBoolean("cloud_storage_api_enable", true)
+                .putString("cloud_storage_api_base", baseUrl)
+                .putBoolean("cloud_storage_api_download_enable", false)
+                .commit();
+        Pref.setBoolean("cloud_storage_api_enable", true);
+
+        final BloodTest bloodTest = createBloodTest(123, 1700000000000L, "bt-delete-uuid");
+        final UploaderQueue delete = UploaderQueue.newEntry("delete", bloodTest);
+        assertThat(delete).isNotNull();
+
+        server.enqueue(new MockResponse().setResponseCode(200)
+                .setBody("{\"status\":\"ok\",\"version\":\"14.0\"}"));
+        server.enqueue(new MockResponse().setResponseCode(200)
+                .setBody("[{\"_id\":\"5f1234567890abcdef123456\",\"uuid\":\"bt-delete-uuid\"}]"));
+        server.enqueue(new MockResponse().setResponseCode(200));
+
+        final NightscoutUploader uploader = new NightscoutUploader(
+                org.robolectric.RuntimeEnvironment.application);
+
+        // :: Act
+        final boolean result = uploader.uploadRest(
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(delete));
+
+        // :: Verify
+        assertThat(result).isTrue();
+
+        final RecordedRequest lookupRequest = findRequest("/api/v1/entries.json", "GET");
+        assertThat(lookupRequest).isNotNull();
+        assertThat(lookupRequest.getPath()).isEqualTo("/api/v1/entries.json?find%5Buuid%5D=bt-delete-uuid");
+
+        final RecordedRequest deleteRequest = findRequest("/api/v1/entries/5f1234567890abcdef123456", "DELETE");
+        assertThat(deleteRequest).isNotNull();
+        assertThat(deleteRequest.getHeader("api-secret")).isEqualTo(EXPECTED_HASHED_SECRET);
+    }
+
+    @Test
     public void uploadRest_whenDisabled_sendsNoHttpRequests() throws Exception {
         // :: Setup
         prefs.edit()
@@ -216,6 +298,11 @@ public class NightscoutUploaderCallerTest extends RobolectricTestWithConfig {
         return bg;
     }
 
+    private static BloodTest createBloodTest(double mgdl, long timestamp, String uuid) {
+        BloodTest.cleanup(-100000);
+        return BloodTest.createLocalOnly(timestamp, mgdl, "test meter", uuid);
+    }
+
     private void enqueueSuccessResponses(int count) {
         for (int i = 0; i < count; i++) {
             server.enqueue(new MockResponse().setResponseCode(200)
@@ -228,14 +315,16 @@ public class NightscoutUploaderCallerTest extends RobolectricTestWithConfig {
      * Drains up to 10 requests from the server within a short timeout.
      */
     private RecordedRequest findRequestByPath(String pathPrefix) throws InterruptedException {
+        return findRequest(pathPrefix, "POST");
+    }
+
+    private RecordedRequest findRequest(String pathPrefix, String method) throws InterruptedException {
         RecordedRequest match = null;
         for (int i = 0; i < 10; i++) {
             final RecordedRequest req = server.takeRequest(2, TimeUnit.SECONDS);
             if (req == null) break;
-            if (req.getPath() != null && req.getPath().startsWith(pathPrefix) && "POST".equals(req.getMethod())) {
-                if (match == null) {
-                    match = req;
-                }
+            if (req.getPath() != null && req.getPath().startsWith(pathPrefix) && method.equals(req.getMethod())) {
+                return req;
             }
         }
         return match;

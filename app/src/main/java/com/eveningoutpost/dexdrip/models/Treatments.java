@@ -642,10 +642,20 @@ public class Treatments extends Model {
     }
 
     public static void delete_by_uuid(String uuid, boolean from_interactive) {
+        delete_by_uuid(uuid, from_interactive, true);
+    }
+
+    public static void delete_by_uuid_local_only(String uuid) {
+        delete_by_uuid(uuid, false, false);
+    }
+
+    private static void delete_by_uuid(String uuid, boolean from_interactive, boolean upload_delete) {
         Treatments thistreat = byuuid(uuid);
         if (thistreat != null) {
 
-            UploaderQueue.newEntry("delete", thistreat);
+            if (upload_delete) {
+                UploaderQueue.newEntry("delete", thistreat);
+            }
             if (from_interactive) {
                 GcmActivity.push_delete_treatment(thistreat);
                 SyncService.startSyncService(3000); // sync in 3 seconds
@@ -1431,6 +1441,5 @@ public class Treatments extends Model {
         return notes != null && notes.startsWith("Priming");
     }
 }
-
 
 

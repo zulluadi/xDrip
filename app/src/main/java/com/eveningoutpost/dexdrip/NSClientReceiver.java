@@ -13,6 +13,7 @@ import android.util.Log;
 
 import com.eveningoutpost.dexdrip.insulin.aaps.AAPSStatusHandler;
 import com.eveningoutpost.dexdrip.models.BgReading;
+import com.eveningoutpost.dexdrip.models.DateUtil;
 import com.eveningoutpost.dexdrip.models.JoH;
 import com.eveningoutpost.dexdrip.models.Treatments;
 import com.eveningoutpost.dexdrip.models.UserError;
@@ -104,6 +105,7 @@ public class NSClientReceiver extends BroadcastReceiver {
 
             case Intents.ACTION_NEW_FOOD: // action changed unexpectedly
             case Intents.ACTION_NEW_TREATMENT:
+            case Intents.ACTION_CHANGED_TREATMENT:
                 if (bundle == null) break;
                 if (prefs.getBoolean("accept_nsclient_treatments", true)) {
                     final String treatment_json = bundle.getString("treatment", "");
@@ -123,6 +125,29 @@ public class NSClientReceiver extends BroadcastReceiver {
                     }
                 } else {
                     Log.d(TAG, "Ignoring nsclient treatment data due to preference");
+                }
+                break;
+
+            case Intents.ACTION_REMOVED_TREATMENT:
+                if (bundle == null) break;
+                if (prefs.getBoolean("accept_nsclient_treatments", true)) {
+                    final String treatment_json = bundle.getString("treatment", "");
+                    if (treatment_json.length() > 0) {
+                        process_REMOVED_TREATMENT_json(treatment_json);
+                    }
+                    final String treatments_json = bundle.getString("treatments", "");
+                    if (treatments_json.length() > 0) {
+                        try {
+                            final JSONArray jsonArray = new JSONArray(treatments_json);
+                            for (int i = 0; i < jsonArray.length(); i++) {
+                                process_REMOVED_TREATMENT_json(jsonArray.getString(i));
+                            }
+                        } catch (JSONException e) {
+                            Log.e(TAG, "Json exception with removed treatments: " + e.toString());
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "Ignoring nsclient removed treatment data due to preference");
                 }
                 break;
 
@@ -221,6 +246,32 @@ public class NSClientReceiver extends BroadcastReceiver {
         }
     }
 
+    private void process_REMOVED_TREATMENT_json(String treatment_json) {
+        try {
+            Log.i(TAG, "Processing removed treatment from NS: " + treatment_json);
+            val tmap = JoH.JsonStringtoMap(treatment_json);
+            val identifier = getTreatmentIdentifier(tmap);
+            if (!emptyString(identifier)) {
+                Treatments.delete_by_uuid_local_only(identifier);
+                return;
+            }
+
+            final long timestamp = getTreatmentTimestamp(tmap);
+            if (timestamp > 0) {
+                final Treatments treatment = Treatments.byTimestamp(timestamp, (int) (2.5 * Constants.MINUTE_IN_MS));
+                if (treatment != null) {
+                    Treatments.delete_by_uuid_local_only(treatment.uuid);
+                } else {
+                    Log.e(TAG, "Could not find removed treatment near " + JoH.dateTimeText(timestamp));
+                }
+            } else {
+                Log.e(TAG, "Removed treatment from NS did not include uuid, _id, NSCLIENT_ID, mills, date or created_at");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Got exception processing removed treatment from NS client " + e.toString());
+        }
+    }
+
     private void process_SGV_json(String sgv_json) {
         if (sgv_json == null) {
             Log.e(TAG, "SGV json is null!");
@@ -278,7 +329,10 @@ public class NSClientReceiver extends BroadcastReceiver {
     private String toTreatmentJSON(HashMap<String, Object> trt_map) {
         JSONObject jsonObject = new JSONObject();
         try {
-            // jsonObject.put("uuid", UUID.fromString(trt_map.get("_id").toString()).toString());
+            final String identifier = getTreatmentIdentifier(trt_map);
+            if (!emptyString(identifier)) {
+                jsonObject.put("uuid", identifier);
+            }
 
             Object ts =  trt_map.get("mills");
             if (ts == null) {
@@ -310,6 +364,23 @@ public class NSClientReceiver extends BroadcastReceiver {
             return "";
         }
     }
+
+    private String getTreatmentIdentifier(HashMap<String, Object> trt_map) {
+        if (trt_map == null) return null;
+        if (trt_map.get("uuid") != null) return trt_map.get("uuid").toString();
+        if (trt_map.get("_id") != null) return trt_map.get("_id").toString();
+        if (trt_map.get("NSCLIENT_ID") != null) return trt_map.get("NSCLIENT_ID").toString();
+        return null;
+    }
+
+    private long getTreatmentTimestamp(HashMap<String, Object> trt_map) {
+        if (trt_map == null) return 0;
+        Object ts = trt_map.get("mills");
+        if (ts == null) ts = trt_map.get("date");
+        if (ts instanceof Number) return ((Number) ts).longValue();
+        if (ts != null) return JoH.tolerantParseLong(ts.toString(), 0);
+        Object created = trt_map.get("created_at");
+        if (created != null) return DateUtil.tolerantFromISODateString(created.toString()).getTime();
+        return 0;
+    }
 }
-
-
