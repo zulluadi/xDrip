@@ -189,13 +189,13 @@ public class NightscoutServiceIntegrationTest extends RobolectricTestWithConfig 
         final String ifModified = "2024-01-01T00:00:00Z";
 
         // :: Act
-        final Response<ResponseBody> response = service.downloadTreatments(API_SECRET, ifModified).execute();
+        final Response<ResponseBody> response = service.downloadTreatments(API_SECRET, ifModified, 150).execute();
         final RecordedRequest request = server.takeRequest();
 
         // :: Verify
         assertThat(response.isSuccessful()).isTrue();
         assertThat(request.getMethod()).isEqualTo("GET");
-        assertThat(request.getPath()).isEqualTo("/api/v1/treatments");
+        assertThat(request.getPath()).isEqualTo("/api/v1/treatments?count=150");
         assertThat(request.getHeader("api-secret")).isEqualTo(API_SECRET);
         assertThat(request.getHeader("BROKEN-If-Modified-Since")).isEqualTo(ifModified);
     }
@@ -231,6 +231,56 @@ public class NightscoutServiceIntegrationTest extends RobolectricTestWithConfig 
         assertThat(response.isSuccessful()).isTrue();
         assertThat(request.getMethod()).isEqualTo("DELETE");
         assertThat(request.getPath()).isEqualTo("/api/v1/treatments/5f1234567890abcdef123456");
+        assertThat(request.getHeader("api-secret")).isEqualTo(API_SECRET);
+    }
+
+    @Test
+    public void findEntryByUUID_sendsGetWithQueryParam() throws Exception {
+        // :: Setup
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("[]"));
+        final String uuid = "abc-123-def";
+
+        // :: Act
+        final Response<ResponseBody> response = service.findEntryByUUID(API_SECRET, uuid).execute();
+        final RecordedRequest request = server.takeRequest();
+
+        // :: Verify
+        assertThat(response.isSuccessful()).isTrue();
+        assertThat(request.getMethod()).isEqualTo("GET");
+        assertThat(request.getPath()).isEqualTo("/api/v1/entries.json?find%5Buuid%5D=abc-123-def");
+        assertThat(request.getHeader("api-secret")).isEqualTo(API_SECRET);
+    }
+
+    @Test
+    public void findEntryByDateAndType_sendsGetWithQueryParams() throws Exception {
+        // :: Setup
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("[]"));
+
+        // :: Act
+        final Response<ResponseBody> response = service.findEntryByDateAndType(API_SECRET, 1700000000000L, "mbg").execute();
+        final RecordedRequest request = server.takeRequest();
+
+        // :: Verify
+        assertThat(response.isSuccessful()).isTrue();
+        assertThat(request.getMethod()).isEqualTo("GET");
+        assertThat(request.getPath()).isEqualTo("/api/v1/entries.json?find%5Bdate%5D=1700000000000&find%5Btype%5D=mbg");
+        assertThat(request.getHeader("api-secret")).isEqualTo(API_SECRET);
+    }
+
+    @Test
+    public void deleteEntry_sendsDeleteWithPathParam() throws Exception {
+        // :: Setup
+        server.enqueue(new MockResponse().setResponseCode(200));
+        final String entryId = "5f1234567890abcdef123456";
+
+        // :: Act
+        final Response<ResponseBody> response = service.deleteEntry(API_SECRET, entryId).execute();
+        final RecordedRequest request = server.takeRequest();
+
+        // :: Verify
+        assertThat(response.isSuccessful()).isTrue();
+        assertThat(request.getMethod()).isEqualTo("DELETE");
+        assertThat(request.getPath()).isEqualTo("/api/v1/entries/5f1234567890abcdef123456");
         assertThat(request.getHeader("api-secret")).isEqualTo(API_SECRET);
     }
 
