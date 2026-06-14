@@ -304,6 +304,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
     double thistimeoffset = 0;
     String thisword = "";
     String thisuuid = "";
+    String thistreatmentnote = "";
     private static String nexttoast;
     boolean carbsset = false;
     boolean[] insulinset = new boolean[MAX_INSULIN_PROFILES];
@@ -547,7 +548,9 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             textCarbohydrates.setVisibility(View.INVISIBLE);
             btnCarbohydrates.setVisibility(View.INVISIBLE);
             reset_viewport = true;
-            Treatments.create(thiscarbsnumber, 0, new ArrayList<InsulinInjection>(), Treatments.getTimeStampWithOffset(thistimeoffset));
+            final long timestamp = Treatments.getTimeStampWithOffset(thistimeoffset);
+            Treatments.create(thiscarbsnumber, 0, new ArrayList<InsulinInjection>(), timestamp);
+            createTreatmentNoteIfNeeded(timestamp);
             thiscarbsnumber = 0;
             if (hideTreatmentButtonsIfAllDone()) {
                 updateCurrentBgInfo("carbs button");
@@ -902,6 +905,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                         }
                     Log.d(TAG, "processAndApproveTreatment create watchkeypad Treatment carbs=" + thiscarbsnumber + " insulin=" + thisInsulinSumNumber + " timestamp=" + JoH.dateTimeText(time) + " uuid=" + thisuuid);
                     Treatments.create(thiscarbsnumber, thisInsulinSumNumber, injections, time, thisuuid);
+                    createTreatmentNoteIfNeeded(time);
 // gruoner: changed pendiq handling 09/12/19        TODO remove duplicate code with helper function
 // in case of multiple injections in a treatment, select the injection with the primary insulin profile defined in the profile editor; if not found, take 0
 // in case of a single injection in a treatment, assume thats the #units to send to pendiq
@@ -914,6 +918,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                     Pendiq.handleTreatment(pendiqInsulin);
                 } else {
                     Log.d(TAG, "processAndApproveTreatment Treatment already exists carbs=" + thiscarbsnumber + " insulin=" + thisInsulinSumNumber + " timestamp=" + JoH.dateTimeText(time));
+                    createTreatmentNoteIfNeeded(time);
                 }
             }
         } else {
@@ -924,7 +929,9 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                     InsulinInjection injection = new InsulinInjection(thisinsulinprofile[i], thisinsulinnumber[i]);
                     injections.add(injection);
                 }
-            Treatments.create(thiscarbsnumber, thisInsulinSumNumber, injections, Treatments.getTimeStampWithOffset(mytimeoffset));
+            final long timestamp = Treatments.getTimeStampWithOffset(mytimeoffset);
+            Treatments.create(thiscarbsnumber, thisInsulinSumNumber, injections, timestamp);
+            createTreatmentNoteIfNeeded(timestamp);
 // gruoner: changed pendiq handling 09/12/19   TODO remove duplicate code with helper function
 // in case of multiple injections in a treatment, select the injection with the primary insulin profile defined in the profile editor; if not found, take 0
 // in case of a single injection in a treatment, assume thats the #units to send to pendiq
@@ -962,10 +969,14 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
         if (bundle != null) {
             String receivedText = bundle.getString(WatchUpdaterService.WEARABLE_VOICE_PAYLOAD);
             if (receivedText != null) {
+                final String receivedTreatmentNote = bundle.getString(WatchUpdaterService.WEARABLE_VOICE_PAYLOAD + "2");
                 voiceRecognitionText.setText(receivedText);
                 voiceRecognitionText.setVisibility(View.VISIBLE);
                 last_speech_time = JoH.ts();
                 naturalLanguageRecognition(receivedText);
+                if (receivedTreatmentNote != null && receivedTreatmentNote.trim().length() > 0) {
+                    thistreatmentnote = receivedTreatmentNote.trim();
+                }
             }
             if (bundle.getString(WatchUpdaterService.WEARABLE_APPROVE_TREATMENT) != null || watchkeypad)
                 processAndApproveTreatment();
@@ -1212,6 +1223,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             insulinset[i] = false;
         }
         thistimeoffset = 0;
+        thistreatmentnote = "";
         thisglucosenumber = 0;
         carbsset = false;
         glucoseset = false;
@@ -1221,6 +1233,14 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             chart.setAlpha((float) 1);
         }
     }
+
+    private void createTreatmentNoteIfNeeded(final long timestamp) {
+        if (thistreatmentnote != null && thistreatmentnote.trim().length() > 0) {
+            Treatments.create_note(thistreatmentnote.trim(), timestamp);
+            thistreatmentnote = "";
+        }
+    }
+
     // jamorham voiceinput methods
 
     public String readTextFile(InputStream inputStream) {
