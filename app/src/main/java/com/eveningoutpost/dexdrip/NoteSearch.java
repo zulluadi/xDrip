@@ -7,7 +7,6 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.text.Editable;
@@ -34,11 +33,13 @@ import com.eveningoutpost.dexdrip.models.JoH;
 import com.eveningoutpost.dexdrip.utils.ListActivityWithMenu;
 
 import java.text.DateFormat;
+import java.text.Normalizer;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Locale;
 import java.util.Vector;
+import java.util.regex.Pattern;
 
 import lecho.lib.hellocharts.util.ChartUtils;
 
@@ -56,8 +57,10 @@ public class NoteSearch extends ListActivityWithMenu {
     private DateFormat dateFormatter = DateFormat.getDateInstance(DateFormat.DEFAULT, Locale.getDefault());
     private SearchResultAdapter resultListAdapter;
     private Cursor dbCursor;
+    private String activeNormalizedSearchTerm;
 
     private static final String TAG = "NoteSearch";
+    private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
 
     private long last_keypress_time = -1;
     private static final long KEY_PAUSE = 500; // latency we use to initiate searches
@@ -177,15 +180,12 @@ public class NoteSearch extends ListActivityWithMenu {
         endDate.add(Calendar.DATE, 1);
         long to = endDate.getTimeInMillis();
 
+        activeNormalizedSearchTerm = null;
+
         dbCursor = db.rawQuery("select timestamp, notes, carbs, insulin, uuid from Treatments where notes IS NOT NULL AND timestamp < " + to + " AND timestamp >= " + from + " ORDER BY timestamp DESC", null);
         dbCursor.moveToFirst();
 
-        int i = 0;
-        for (; i < RESTRICT_SEARCH && !dbCursor.isAfterLast(); i++) {
-            SearchResult result = new SearchResult(dbCursor.getLong(0), dbCursor.getString(1), dbCursor.getDouble(2), dbCursor.getDouble(3), dbCursor.getString(4));
-            resultListAdapter.addSingle(result);
-            dbCursor.moveToNext();
-        }
+        int i = loadMoreResultsFromCursor();
 
         if (i == 0){
             if (from_interactive) JoH.static_toast_short(getString(R.string.nothing_found));
@@ -227,24 +227,18 @@ public class NoteSearch extends ListActivityWithMenu {
         }
 
 
-        DatabaseUtils.sqlEscapeString(searchTerm);
-
         long from = date1.getTimeInMillis();
 
         Calendar endDate = (GregorianCalendar) date2.clone();
         endDate.add(Calendar.DATE, 1);
         long to = endDate.getTimeInMillis();
 
+        activeNormalizedSearchTerm = normalizeSearchTerm(searchTerm);
 
-        dbCursor = db.rawQuery("select timestamp, notes, carbs, insulin, uuid from Treatments where notes IS NOT NULL AND timestamp < ? AND timestamp >= ? AND notes like ? ORDER BY timestamp DESC", new String[]{Long.toString(to), Long.toString(from), "%" + searchTerm + "%"});
+        dbCursor = db.rawQuery("select timestamp, notes, carbs, insulin, uuid from Treatments where notes IS NOT NULL AND timestamp < ? AND timestamp >= ? ORDER BY timestamp DESC", new String[]{Long.toString(to), Long.toString(from)});
         dbCursor.moveToFirst();
 
-        int i = 0;
-        for (; i < RESTRICT_SEARCH && !dbCursor.isAfterLast(); i++) {
-            SearchResult result = new SearchResult(dbCursor.getLong(0), dbCursor.getString(1), dbCursor.getDouble(2), dbCursor.getDouble(3), dbCursor.getString(4));
-            resultListAdapter.addSingle(result);
-            dbCursor.moveToNext();
-        }
+        int i = loadMoreResultsFromCursor();
 
         if (i == 0 && from_interactive){
             JoH.static_toast_short(getString(R.string.nothing_found));
@@ -380,12 +374,8 @@ public class NoteSearch extends ListActivityWithMenu {
         //check if cursor open
         if (dbCursor == null || dbCursor.isClosed()) return;
 
-        //load more
-        for (int i = 0; i < RESTRICT_SEARCH && !dbCursor.isAfterLast(); i++) {
-            SearchResult result = new SearchResult(dbCursor.getLong(0), dbCursor.getString(1), dbCursor.getDouble(2), dbCursor.getDouble(3), dbCursor.getString(4));
-            resultListAdapter.addSingle(result);
-            dbCursor.moveToNext();
-        }
+        loadMoreResultsFromCursor();
+
         //add action if needed
         if (dbCursor.isAfterLast()) {
             dbCursor.close();
@@ -394,6 +384,29 @@ public class NoteSearch extends ListActivityWithMenu {
             result.setLoadMoreActionFlag();
             resultListAdapter.addSingle(result);
         }
+    }
+
+    private int loadMoreResultsFromCursor() {
+        int results = 0;
+        while (results < RESTRICT_SEARCH && !dbCursor.isAfterLast()) {
+            if (matchesActiveSearch(dbCursor.getString(1))) {
+                SearchResult result = new SearchResult(dbCursor.getLong(0), dbCursor.getString(1), dbCursor.getDouble(2), dbCursor.getDouble(3), dbCursor.getString(4));
+                resultListAdapter.addSingle(result);
+                results++;
+            }
+            dbCursor.moveToNext();
+        }
+        return results;
+    }
+
+    private boolean matchesActiveSearch(final String note) {
+        return activeNormalizedSearchTerm == null || normalizeSearchTerm(note).contains(activeNormalizedSearchTerm);
+    }
+
+    static String normalizeSearchTerm(final String text) {
+        if (text == null) return "";
+        final String decomposed = Normalizer.normalize(text, Normalizer.Form.NFD);
+        return DIACRITICS_PATTERN.matcher(decomposed).replaceAll("").toLowerCase(Locale.ROOT);
     }
 
     static class ViewHolder {
