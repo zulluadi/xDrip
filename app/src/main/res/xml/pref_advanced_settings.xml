@@ -1102,6 +1102,14 @@
             android:summary="@string/debug_and_other_misc_options"
             android:title="@string/less_common_settings">
 
+            <ListPreference
+                android:defaultValue=""
+                android:entries="@array/SpeechRecognitionLanguageEntries"
+                android:entryValues="@array/SpeechRecognitionLanguageValues"
+                android:key="speech-recognition-language"
+                android:summary="@string/summary_speech_language"
+                android:title="@string/speech_language" />
+
             <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
                 android:key="xdrip_extra_status_line"
                 android:summary="@string/options_for_extra_line"
@@ -1636,4 +1644,3 @@
 
     </PreferenceCategory>
 </PreferenceScreen>
-
