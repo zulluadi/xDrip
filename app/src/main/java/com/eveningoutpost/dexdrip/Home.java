@@ -975,12 +975,15 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             String receivedText = bundle.getString(WatchUpdaterService.WEARABLE_VOICE_PAYLOAD);
             if (receivedText != null) {
                 final String receivedTreatmentNote = bundle.getString(WatchUpdaterService.WEARABLE_VOICE_PAYLOAD + "2");
-                voiceRecognitionText.setText(receivedText);
+                final String trimmedTreatmentNote = receivedTreatmentNote != null ? receivedTreatmentNote.trim() : "";
+                voiceRecognitionText.setText(trimmedTreatmentNote.length() > 0
+                        ? receivedText + "\nNote: " + trimmedTreatmentNote
+                        : receivedText);
                 voiceRecognitionText.setVisibility(View.VISIBLE);
                 last_speech_time = JoH.ts();
                 naturalLanguageRecognition(receivedText);
-                if (receivedTreatmentNote != null && receivedTreatmentNote.trim().length() > 0) {
-                    thistreatmentnote = receivedTreatmentNote.trim();
+                if (trimmedTreatmentNote.length() > 0) {
+                    thistreatmentnote = trimmedTreatmentNote;
                 }
             }
             if (bundle.getString(WatchUpdaterService.WEARABLE_APPROVE_TREATMENT) != null || watchkeypad)
