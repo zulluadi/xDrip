@@ -257,6 +257,44 @@ public class NightscoutUploaderCallerTest extends RobolectricTestWithConfig {
     }
 
     @Test
+    public void uploadRest_deletesTreatmentSourcedBloodTestFromTreatments() throws Exception {
+        // :: Setup
+        final String baseUrl = "http://" + SECRET + "@" + server.getHostName()
+                + ":" + server.getPort() + "/api/v1/";
+        prefs.edit()
+                .putBoolean("cloud_storage_api_enable", true)
+                .putString("cloud_storage_api_base", baseUrl)
+                .putBoolean("cloud_storage_api_download_enable", false)
+                .commit();
+        Pref.setBoolean("cloud_storage_api_enable", true);
+
+        final BloodTest bloodTest = BloodTest.createLocalOnly(1700000060000L, 123, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, "5f1234567890abcdef123456");
+        final UploaderQueue delete = UploaderQueue.newEntry("delete", bloodTest);
+        assertThat(delete).isNotNull();
+
+        server.enqueue(new MockResponse().setResponseCode(200)
+                .setBody("{\"status\":\"ok\",\"version\":\"14.0\"}"));
+        server.enqueue(new MockResponse().setResponseCode(200));
+
+        final NightscoutUploader uploader = new NightscoutUploader(
+                org.robolectric.RuntimeEnvironment.application);
+
+        // :: Act
+        final boolean result = uploader.uploadRest(
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(delete));
+
+        // :: Verify
+        assertThat(result).isTrue();
+
+        final RecordedRequest deleteRequest = findRequest("/api/v1/treatments/5f1234567890abcdef123456", "DELETE");
+        assertThat(deleteRequest).isNotNull();
+        assertThat(deleteRequest.getHeader("api-secret")).isEqualTo(EXPECTED_HASHED_SECRET);
+    }
+
+    @Test
     public void uploadRest_whenDisabled_sendsNoHttpRequests() throws Exception {
         // :: Setup
         prefs.edit()
