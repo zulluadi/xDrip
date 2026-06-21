@@ -79,14 +79,35 @@ public class EntryProcessor {
         if (!live || entry.mbg <= 0) return;
 
         final String uuid = entry.uuid != null ? entry.uuid : entry._id;
-        if (BloodTest.byUUID(uuid) != null || BloodTest.getForPreciseTimestamp(recordTimestamp, 10000) != null) {
+        final BloodTest existingByUuid = BloodTest.byUUID(uuid);
+        if (existingByUuid != null) {
+            markAsNightscoutEntryBloodTest(existingByUuid, entry);
+            return;
+        }
+        final BloodTest existingByTimestamp = BloodTest.getForPreciseTimestamp(recordTimestamp, 10000);
+        if (existingByTimestamp != null) {
+            if (existingByTimestamp.source != null && existingByTimestamp.source.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG)) {
+                markAsNightscoutEntryBloodTest(existingByTimestamp, entry);
+            }
             return;
         }
 
-        final String source = (entry.device != null ? entry.device : "Nightscout") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TAG;
+        final String source = nightscoutEntryBloodTestSource(entry);
         final BloodTest bloodTest = BloodTest.createLocalOnly(recordTimestamp, entry.mbg, source, uuid);
         if (bloodTest != null) {
             UserError.Log.ueh(TAG, "Received new Bloodtest entry from Nightscout: " + Unitized.unitized_string_static(entry.mbg));
+        }
+    }
+
+    private static String nightscoutEntryBloodTestSource(final Entry entry) {
+        return (entry.device != null ? entry.device : "Nightscout") + " " + NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG;
+    }
+
+    private static void markAsNightscoutEntryBloodTest(final BloodTest bloodTest, final Entry entry) {
+        final String source = nightscoutEntryBloodTestSource(entry);
+        if (bloodTest.source == null || !bloodTest.source.equals(source)) {
+            bloodTest.source = source;
+            bloodTest.saveit();
         }
     }
 }

@@ -90,7 +90,7 @@ public class NightscoutTreatments {
                         if (tr.getString("units").equals("mmol"))
                             mgdl = mgdl * Constants.MMOLL_TO_MGDL;
                         if (existing == null) {
-                            final BloodTest bt = BloodTest.createLocalOnly(timestamp, mgdl, tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TAG, nightscout_id);
+                            final BloodTest bt = BloodTest.createLocalOnly(timestamp, mgdl, tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, nightscout_id);
                             if (bt != null) {
                                 new_data = true;
                                 UserError.Log.ueh(TAG, "Received new Bloodtest data from Nightscout: " + BgGraphBuilder.unitized_string_with_units_static(mgdl) + " @ " + JoH.dateTimeText(timestamp));
@@ -101,7 +101,7 @@ public class NightscoutTreatments {
                         } else {
                             if (d)
                                 UserError.Log.d(TAG, "Already a bloodtest with uuid: " + uuid);
-                            final String source = tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TAG;
+                            final String source = tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG;
                             if ((existing.mgdl != mgdl) || (existing.timestamp != timestamp) || ((existing.state & BloodTest.STATE_VALID) == 0) || (existing.source == null) || (!existing.source.equals(source))) {
                                 UserError.Log.ueh(TAG, "Bloodtest changes from Nightscout: " + BgGraphBuilder.unitized_string_with_units_static(mgdl) + " @ " + JoH.dateTimeText(timestamp) + " vs " + BgGraphBuilder.unitized_string_with_units_static(existing.mgdl) + " @ " + JoH.dateTimeText(existing.timestamp));
                                 existing.mgdl = mgdl;
@@ -283,7 +283,8 @@ public class NightscoutTreatments {
 
         boolean removed = false;
         for (final BloodTest bloodTest : localBloodTests) {
-            if (bloodTest.uuid == null || bloodTest.source == null || !bloodTest.source.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG)) {
+            if (bloodTest.uuid == null || bloodTest.source == null || !bloodTest.source.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG)
+                    || bloodTest.source.contains(NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG)) {
                 continue;
             }
             if (!remoteBloodTestIds.contains(bloodTest.uuid)) {
