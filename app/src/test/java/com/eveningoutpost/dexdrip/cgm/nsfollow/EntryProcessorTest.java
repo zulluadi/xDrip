@@ -33,7 +33,30 @@ public class EntryProcessorTest extends RobolectricTestWithConfig {
             assertThat(bloodTest).isNotNull();
             assertThat(bloodTest.mgdl).isEqualTo(123);
             assertThat(bloodTest.timestamp).isEqualTo(timestamp);
-            assertThat(bloodTest.source).contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG);
+            assertThat(bloodTest.source).contains(NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG);
+        } finally {
+            BloodTest.cleanup(-100000);
+        }
+    }
+
+    @Test
+    public void processEntries_marksExistingBloodTestAsEntrySourced() {
+        BloodTest.cleanup(-100000);
+
+        try {
+            final long timestamp = Instant.now().toEpochMilli();
+            final Entry entry = new Entry();
+            entry._id = "5f1234567890abcdef123456";
+            entry.type = "mbg";
+            entry.date = timestamp;
+            entry.mbg = 123;
+            entry.device = "Maia xDrip";
+
+            final BloodTest existing = BloodTest.createLocalOnly(timestamp, 123, "Maia xDrip " + NightscoutUploader.VIA_NIGHTSCOUT_TAG, entry._id);
+
+            EntryProcessor.processEntries(Collections.singletonList(entry), true);
+
+            assertThat(BloodTest.byUUID(existing.uuid).source).contains(NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG);
         } finally {
             BloodTest.cleanup(-100000);
         }

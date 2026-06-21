@@ -107,6 +107,8 @@ public class NightscoutUploader {
     public static int last_exception_log_count = 0;
     public static String last_exception;
     public static final String VIA_NIGHTSCOUT_TAG = "via Nightscout";
+    public static final String VIA_NIGHTSCOUT_ENTRIES_TAG = VIA_NIGHTSCOUT_TAG + " entries";
+    public static final String VIA_NIGHTSCOUT_TREATMENTS_TAG = VIA_NIGHTSCOUT_TAG + " treatments";
 
     private static boolean notification_shown = false;
 
