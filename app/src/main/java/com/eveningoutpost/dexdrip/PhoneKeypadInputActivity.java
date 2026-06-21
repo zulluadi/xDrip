@@ -9,6 +9,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -44,11 +45,13 @@ public class PhoneKeypadInputActivity extends BaseActivity {
             sixButton, sevenButton, eightButton, nineButton, starButton, backSpaceButton, multiButton1, multiButton2, multiButton3;
     private ImageButton callImageButton, backspaceImageButton, insulintabbutton, carbstabbutton,
             bloodtesttabbutton, timetabbutton, speakbutton;
+    private EditText carbDescriptionEditText;
 
     private static String currenttab = "insulin-1";
     private static final String LAST_TAB_STORE = "phone-keypad-treatment-last-tab";
     private static final String TAG = "KeypadInput";
     private static Map<String, String> values = new HashMap<String, String>();
+    private static String carbDescription = "";
     private String bgUnits;
     private Insulin insulinProfile1 = null;
     private Insulin insulinProfile2 = null;
@@ -96,6 +99,8 @@ public class PhoneKeypadInputActivity extends BaseActivity {
         multiButton1 = (Button) findViewById(R.id.multi_button1);
         multiButton2 = (Button) findViewById(R.id.multi_button2);
         multiButton3 = (Button) findViewById(R.id.multi_button3);
+        carbDescriptionEditText = (EditText) findViewById(R.id.carb_description_edit_text);
+        carbDescriptionEditText.setText(carbDescription);
         // callImageButton = (ImageButton) stub.findViewById(R.id.call_image_button);
         // backspaceImageButton = (ImageButton) stub.findViewById(R.id.backspace_image_button);
 
@@ -302,6 +307,7 @@ public class PhoneKeypadInputActivity extends BaseActivity {
 
     public static void resetValues() {
         values = new HashMap<String, String>();
+        carbDescription = "";
     }
 
     private static String getValue(String tab) {
@@ -422,10 +428,23 @@ public class PhoneKeypadInputActivity extends BaseActivity {
 
         if (mystring.length() > 1) {
             //SendData(this, WEARABLE_VOICE_PAYLOAD, mystring.getBytes(StandardCharsets.UTF_8));
+            final String treatmentNote = getCarbDescription();
             resetValues();
+            if (carbDescriptionEditText != null) carbDescriptionEditText.setText("");
             //WatchUpdaterService.receivedText(this, mystring); // reuse watch handling function to send data to home
-            startHomeWithExtra(this, WatchUpdaterService.WEARABLE_VOICE_PAYLOAD, mystring); // send data to home directly
+            startHomeWithExtra(this, WatchUpdaterService.WEARABLE_VOICE_PAYLOAD, mystring, treatmentNote); // send data to home directly
             finish();
+        }
+    }
+
+    private String getCarbDescription() {
+        if (carbDescriptionEditText == null) return "";
+        return carbDescriptionEditText.getText().toString().trim();
+    }
+
+    private void saveCarbDescription() {
+        if (carbDescriptionEditText != null) {
+            carbDescription = carbDescriptionEditText.getText().toString();
         }
     }
 
@@ -438,7 +457,7 @@ public class PhoneKeypadInputActivity extends BaseActivity {
         carbstabbutton.setBackgroundColor(offColor);
         timetabbutton.setBackgroundColor(offColor);
         bloodtesttabbutton.setBackgroundColor(offColor);
-        insulinTypesSection.setVisibility(multipleInsulins ? View.VISIBLE : View.GONE);
+        insulinTypesSection.setVisibility(View.GONE);
         multiButton1.setBackgroundColor(offColor);
         multiButton2.setBackgroundColor(offColor);
         multiButton3.setBackgroundColor(offColor);
@@ -448,11 +467,13 @@ public class PhoneKeypadInputActivity extends BaseActivity {
         multiButton1.setEnabled(false);
         multiButton2.setEnabled(false);
         multiButton3.setEnabled(false);
+        carbDescriptionEditText.setVisibility(View.GONE);
 
         String append = "";
         switch (currenttab.split("-")[0]) {
             case "insulin":
                 insulintabbutton.setBackgroundColor(onColor);
+                insulinTypesSection.setVisibility(multipleInsulins ? View.VISIBLE : View.GONE);
                 String insulinprofile = "";
                 if (insulinProfile1 != null) {
                     multiButton1.setText(insulinProfile1.getName());
@@ -505,6 +526,7 @@ public class PhoneKeypadInputActivity extends BaseActivity {
                 break;
             case "carbs":
                 carbstabbutton.setBackgroundColor(onColor);
+                carbDescriptionEditText.setVisibility(View.VISIBLE);
                 append = " g " + getString(R.string.carbs);
                 break;
             case "bloodtest":
@@ -548,6 +570,7 @@ public class PhoneKeypadInputActivity extends BaseActivity {
 
     @Override
     protected void onPause() {
+        saveCarbDescription();
         PersistentStore.setString(LAST_TAB_STORE, currenttab);
         super.onPause();
     }
