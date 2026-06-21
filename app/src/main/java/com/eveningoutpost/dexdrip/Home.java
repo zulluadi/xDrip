@@ -991,7 +991,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             else if (bundle.getString(Home.START_TEXT_RECOGNITION) != null) promptTextInput_old();
             else if (bundle.getString(Home.CREATE_TREATMENT_NOTE) != null) {
                 try {
-                    showNoteTextInputDialog(null, Long.parseLong(bundle.getString(Home.CREATE_TREATMENT_NOTE)), JoH.tolerantParseDouble(bundle.getString(Home.CREATE_TREATMENT_NOTE + "2"), 0));
+                    showNoteTextInputDialog(null, Long.parseLong(bundle.getString(Home.CREATE_TREATMENT_NOTE)), JoH.tolerantParseDouble(bundle.getString(Home.CREATE_TREATMENT_NOTE + "2"), 0), bundle.getString(Home.CREATE_TREATMENT_NOTE + "3"));
                 } catch (NullPointerException e) {
                     Log.d(TAG, "Got null point exception during CREATE_TREATMENT_NOTE Intent");
                 } catch (NumberFormatException e) {
@@ -3769,7 +3769,13 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
     }
 
     public void showNoteTextInputDialog(View myitem, final long timestamp, final double position) {
-        Log.d(TAG, "showNoteTextInputDialog: ts:" + timestamp + " pos:" + position);
+        showNoteTextInputDialog(myitem, timestamp, position, null);
+    }
+
+    public void showNoteTextInputDialog(View myitem, final long timestamp, final double position, final String treatmentUuid) {
+        final boolean editingExistingNote = treatmentUuid != null && treatmentUuid.length() > 0;
+        final Treatments existingTreatment = editingExistingNote ? Treatments.byuuid(treatmentUuid) : null;
+        Log.d(TAG, "showNoteTextInputDialog: ts:" + timestamp + " pos:" + position + " uuid:" + treatmentUuid);
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
         LayoutInflater inflater = this.getLayoutInflater();
         final View dialogView = inflater.inflate(R.layout.note_dialog_phone, null);
@@ -3779,18 +3785,27 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
         final CheckBox cbx = (CheckBox) dialogView.findViewById(R.id.default_to_voice_input);
         cbx.setChecked(Pref.getBooleanDefaultFalse("default_to_voice_notes"));
 
-        dialogBuilder.setTitle(R.string.treatment_note);
+        if (existingTreatment != null && existingTreatment.notes != null) {
+            edt.setText(existingTreatment.notes);
+            edt.setSelection(edt.length());
+        }
+
+        dialogBuilder.setTitle(editingExistingNote ? R.string.edit_note : R.string.treatment_note);
         //dialogBuilder.setMessage("Enter text below");
         dialogBuilder.setPositiveButton(R.string.done, (dialog, whichButton) -> {
             String treatment_text = edt.getText().toString().trim();
             Log.d(TAG, "Got treatment note: " + treatment_text);
-            Treatments.create_note(treatment_text, timestamp, position); // timestamp?
+            if (editingExistingNote) {
+                Treatments.update_note_by_uuid(treatmentUuid, treatment_text);
+            } else {
+                Treatments.create_note(treatment_text, timestamp, position); // timestamp?
+            }
             Home.staticRefreshBGCharts();
 
             if (treatment_text.length() > 0) {
                 // display snackbar of the snackbar
-                final View.OnClickListener mOnClickListener = v -> Home.startHomeWithExtra(xdrip.getAppContext(), Home.CREATE_TREATMENT_NOTE, Long.toString(timestamp), "-1"); // Let's not enter a y position to avoid having to worry about BG units
-                Home.snackBar(R.string.add_note, getString(R.string.added) + ":    " + treatment_text, mOnClickListener, mActivity);
+                final View.OnClickListener mOnClickListener = v -> Home.startHomeWithExtra(xdrip.getAppContext(), Home.CREATE_TREATMENT_NOTE, Long.toString(timestamp), "-1", editingExistingNote ? treatmentUuid : ""); // Let's not enter a y position to avoid having to worry about BG units
+                Home.snackBar(editingExistingNote ? R.string.edit_note : R.string.add_note, getString(editingExistingNote ? R.string.done : R.string.added) + ":    " + treatment_text, mOnClickListener, mActivity);
             }
 
             if (Pref.getBooleanDefaultFalse("default_to_voice_notes")) {
@@ -3803,7 +3818,7 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
             }
 
         });
-        if (Treatments.byTimestamp(timestamp, (int) (2.5 * MINUTE_IN_MS)) != null) {
+        if ((editingExistingNote && existingTreatment != null) || Treatments.byTimestamp(timestamp, (int) (2.5 * MINUTE_IN_MS)) != null) {
             dialogBuilder.setNeutralButton(R.string.delete, (dialog, whichButton) -> {
                 // are you sure?
                 final AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
@@ -3811,7 +3826,11 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                 builder.setMessage(gs(R.string.are_you_sure_you_want_to_delete_this_treatment));
                 builder.setPositiveButton(gs(R.string.yes_delete), (dialog1, which) -> {
                     dialog1.dismiss();
-                    Treatments.delete_by_timestamp(timestamp, (int) (2.5 * MINUTE_IN_MS), true); // 2.5 min resolution
+                    if (editingExistingNote) {
+                        Treatments.delete_by_uuid(treatmentUuid, true);
+                    } else {
+                        Treatments.delete_by_timestamp(timestamp, (int) (2.5 * MINUTE_IN_MS), true); // 2.5 min resolution
+                    }
                     staticRefreshBGCharts();
                     JoH.static_toast_short(gs(R.string.deleted));
                 });
