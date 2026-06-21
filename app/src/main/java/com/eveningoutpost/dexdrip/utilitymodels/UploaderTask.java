@@ -138,6 +138,9 @@ public class UploaderTask extends AsyncTask<String, Void, Void> {
                                         items.add(up);
                                         Log.wtf(TAG, "Delete Treatments with ID: " + up.reference_uuid);
                                         treatmentsDel.add(up.reference_uuid);
+                                    } else if (THIS_QUEUE == UploaderQueue.NIGHTSCOUT_RESTAPI && type.equals(BloodTest.class.getSimpleName())) {
+                                        items.add(up);
+                                        Log.wtf(TAG, "Delete BloodTest with ID: " + up.reference_uuid);
                                     } else if (up.reference_uuid != null) {
                                         Log.d(TAG, UploaderQueue.getCircuitName(THIS_QUEUE) + " delete not yet implemented: " + up.reference_uuid);
                                         up.completed(THIS_QUEUE); // mark as completed so as not to tie up the queue for now
@@ -151,7 +154,7 @@ public class UploaderTask extends AsyncTask<String, Void, Void> {
                     }
                 }
 
-                if ((bgReadings.size() > 0) || (calibrations.size() > 0) || (bloodtests.size() > 0)
+                if ((bgReadings.size() > 0) || (calibrations.size() > 0) || (bloodtests.size() > 0) || (items.size() > 0)
                         || (treatmentsAdd.size() > 0 || treatmentsDel.size() > 0) || (transmittersData.size() > 0) ||
                         (libreBlock.size() > 0)
                         || (UploaderQueue.getPendingbyType(Treatments.class.getSimpleName(), THIS_QUEUE, 1).size() > 0)) {
@@ -164,7 +167,7 @@ public class UploaderTask extends AsyncTask<String, Void, Void> {
                         uploadStatus = uploader.uploadMongo(bgReadings, calibrations, calibrations, transmittersData, libreBlock);
                     } else if (THIS_QUEUE == UploaderQueue.NIGHTSCOUT_RESTAPI) {
                         final NightscoutUploader uploader = new NightscoutUploader(xdrip.getAppContext());
-                        uploadStatus = uploader.uploadRest(bgReadings, bloodtests, calibrations);
+                        uploadStatus = uploader.uploadRest(bgReadings, bloodtests, calibrations, items);
                     } else if (THIS_QUEUE == UploaderQueue.INFLUXDB_RESTAPI) {
                         final InfluxDBUploader influxDBUploader = new InfluxDBUploader(xdrip.getAppContext());
                         uploadStatus = influxDBUploader.upload(bgReadings, calibrations, calibrations);

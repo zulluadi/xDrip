@@ -112,14 +112,14 @@ public class NightscoutFollowIntegrationTest extends RobolectricTestWithConfig {
                 .addHeader("Content-Type", "application/json"));
 
         // :: Act
-        Response<ResponseBody> response = api.getTreatments("treatment-secret").execute();
+        Response<ResponseBody> response = api.getTreatments("treatment-secret", 150).execute();
 
         // :: Verify
         assertThat(response.isSuccessful()).isTrue();
 
         RecordedRequest request = server.takeRequest();
         assertThat(request.getMethod()).isEqualTo("GET");
-        assertThat(request.getPath()).isEqualTo("/api/v1/treatments");
+        assertThat(request.getPath()).isEqualTo("/api/v1/treatments?count=150");
         assertThat(request.getHeader("api-secret")).isEqualTo("treatment-secret");
         assertThat(response.body().string()).contains("Temp Basal");
     }

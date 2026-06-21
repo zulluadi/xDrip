@@ -107,6 +107,8 @@ public class NightscoutUploader {
     public static int last_exception_log_count = 0;
     public static String last_exception;
     public static final String VIA_NIGHTSCOUT_TAG = "via Nightscout";
+    public static final String VIA_NIGHTSCOUT_ENTRIES_TAG = VIA_NIGHTSCOUT_TAG + " entries";
+    public static final String VIA_NIGHTSCOUT_TREATMENTS_TAG = VIA_NIGHTSCOUT_TAG + " treatments";
 
     private static boolean notification_shown = false;
 
@@ -120,6 +122,9 @@ public class NightscoutUploader {
     public static final int FAIl_COUNT_NOTIFICATION = FAIL_NOTIFICATION_PERIOD / 60 / 5 - 1; // Number of 5-minute read cycles corresponding to notification period
     public static final int FAIL_LOG_PERIOD = 6 * 60 * 60; // FAILED upload/download log will be shown if there is no upload/download for 6 hours.
     public static final int FAIL_COUNT_LOG = FAIL_LOG_PERIOD / 60 / 5 - 1; // Number of 5-minute read cycles corresponding to log period
+    // Request enough treatment history to reconcile local Nightscout-origin treatments against deletions.
+    // Without an explicit count, Nightscout may return only a small default page and hide older deletes.
+    private static final int TREATMENT_DOWNLOAD_COUNT = 150;
 
     private Context mContext;
     private Boolean enableRESTUpload;
@@ -151,13 +156,22 @@ public class NightscoutUploader {
 
         @GET("treatments")
             // retrofit2/okhttp3 could do the if-modified-since natively using cache
-        Call<ResponseBody> downloadTreatments(@Header("api-secret") String secret, @Header("BROKEN-If-Modified-Since") String ifmodified);
+        Call<ResponseBody> downloadTreatments(@Header("api-secret") String secret, @Header("BROKEN-If-Modified-Since") String ifmodified, @Query("count") int count);
 
         @GET("treatments.json")
         Call<ResponseBody> findTreatmentByUUID(@Header("api-secret") String secret, @Query("find[uuid]") String uuid);
 
         @DELETE("treatments/{id}")
         Call<ResponseBody> deleteTreatment(@Header("api-secret") String secret, @Path("id") String id);
+
+        @GET("entries.json")
+        Call<ResponseBody> findEntryByUUID(@Header("api-secret") String secret, @Query("find[uuid]") String uuid);
+
+        @GET("entries.json")
+        Call<ResponseBody> findEntryByDateAndType(@Header("api-secret") String secret, @Query("find[date]") long date, @Query("find[type]") String type);
+
+        @DELETE("entries/{id}")
+        Call<ResponseBody> deleteEntry(@Header("api-secret") String secret, @Path("id") String id);
 
         @POST("activity")
         Call<ResponseBody> uploadActivity(@Header("api-secret") String secret, @Body RequestBody body);
@@ -279,13 +293,17 @@ public class NightscoutUploader {
     }
 
     public boolean uploadRest(List<BgReading> glucoseDataSets, List<BloodTest> meterRecords, List<Calibration> calRecords) {
+        return uploadRest(glucoseDataSets, meterRecords, calRecords, Collections.emptyList());
+    }
+
+    public boolean uploadRest(List<BgReading> glucoseDataSets, List<BloodTest> meterRecords, List<Calibration> calRecords, List<UploaderQueue> queuedItems) {
 
         boolean apiStatus = false;
 
         if (enableRESTUpload) {
             long start = System.currentTimeMillis();
             Log.i(TAG, String.format("Starting upload of %s record using a REST API", glucoseDataSets.size()));
-            apiStatus = doRESTUpload(prefs, glucoseDataSets, meterRecords, calRecords);
+            apiStatus = doRESTUpload(prefs, glucoseDataSets, meterRecords, calRecords, queuedItems);
             Log.i(TAG, String.format("Finished upload of %s record using a REST API in %s ms result: %b", glucoseDataSets.size(), System.currentTimeMillis() - start, apiStatus));
 
             if (prefs.getBoolean("cloud_storage_api_download_enable", false)) {
@@ -414,7 +432,7 @@ public class NightscoutUploader {
                         if (last_modified_string.equals(""))
                             last_modified_string = JoH.getRFC822String(0);
                         final long request_start = JoH.tsl();
-                        r = nightscoutService.downloadTreatments(hashedSecret, last_modified_string).execute();
+                        r = nightscoutService.downloadTreatments(hashedSecret, last_modified_string, TREATMENT_DOWNLOAD_COUNT).execute();
 
                         if ((r != null) && (r.raw().networkResponse().code() == HttpURLConnection.HTTP_NOT_MODIFIED)) {
                             Log.d(TAG, "Treatments on " + uri.getHost() + ":" + uri.getPort() + " not modified since: " + last_modified_string);
@@ -458,7 +476,7 @@ public class NightscoutUploader {
         return new_data;
     }
 
-    private boolean doRESTUpload(SharedPreferences prefs, List<BgReading> glucoseDataSets, List<BloodTest> meterRecords, List<Calibration> calRecords) {
+    private boolean doRESTUpload(SharedPreferences prefs, List<BgReading> glucoseDataSets, List<BloodTest> meterRecords, List<Calibration> calRecords, List<UploaderQueue> queuedItems) {
         String baseURLSettings = prefs.getString("cloud_storage_api_base", "");
         ArrayList<String> baseURIs = new ArrayList<String>();
 
@@ -508,7 +526,7 @@ public class NightscoutUploader {
                 if (apiVersion == 1) {
                     String hashedSecret = Hashing.sha1().hashBytes(secret.getBytes(Charsets.UTF_8)).toString();
                     doStatusUpdate(nightscoutService, retrofit.baseUrl().url().toString(), hashedSecret); // update status if needed
-                    doRESTUploadTo(nightscoutService, hashedSecret, glucoseDataSets, meterRecords, calRecords, tups, THIS_QUEUE);
+                    doRESTUploadTo(nightscoutService, hashedSecret, glucoseDataSets, meterRecords, calRecords, tups, queuedItems, THIS_QUEUE);
                 } else {
                     doLegacyRESTUploadTo(nightscoutService, glucoseDataSets);
                 }
@@ -555,7 +573,7 @@ public class NightscoutUploader {
         }
     }
 
-    private void doRESTUploadTo(NightscoutService nightscoutService, String secret, List<BgReading> glucoseDataSets, List<BloodTest> meterRecords, List<Calibration> calRecords, List<UploaderQueue> tups, long THIS_QUEUE) throws Exception {
+    private void doRESTUploadTo(NightscoutService nightscoutService, String secret, List<BgReading> glucoseDataSets, List<BloodTest> meterRecords, List<Calibration> calRecords, List<UploaderQueue> tups, List<UploaderQueue> queuedItems, long THIS_QUEUE) throws Exception {
         final JSONArray array = new JSONArray();
 
         for (BgReading record : glucoseDataSets) {
@@ -601,6 +619,7 @@ public class NightscoutUploader {
                 handleRestFailure(msg);
             }
         }
+        deleteBloodTests(nightscoutService, secret, queuedItems, THIS_QUEUE);
         // TODO we may want to check nightscout version before trying to upload!!
         // TODO in the future we may want to merge these in to a single post
         if (Pref.getBooleanDefaultFalse("use_pebble_health") && (Home.get_engineering_mode())) {
@@ -738,8 +757,71 @@ public class NightscoutUploader {
         json.put("date", record.timestamp);
         json.put("dateString", format.format(record.timestamp));
         json.put("mbg", record.mgdl);
+        json.put("uuid", record.uuid);
         json.put("sysTime", format.format(record.timestamp));
         array.put(json);
+    }
+
+    private void deleteBloodTests(NightscoutService nightscoutService, String apiSecret, List<UploaderQueue> queuedItems, long THIS_QUEUE) throws Exception {
+        if (queuedItems == null || queuedItems.isEmpty()) return;
+
+        for (UploaderQueue up : queuedItems) {
+            if (!"delete".equals(up.action) || !BloodTest.class.getSimpleName().equals(up.type)) continue;
+            if (apiSecret == null) {
+                Log.wtf(TAG, "Cannot delete blood tests without api secret being set");
+                continue;
+            }
+
+            String entryId = up.reference_uuid != null && up.reference_uuid.length() == 24 ? up.reference_uuid : null;
+            if (entryId == null && up.reference_uuid != null) {
+                entryId = firstIdFromResponse(nightscoutService.findEntryByUUID(apiSecret, up.reference_uuid).execute());
+            }
+            if (entryId == null) {
+                final BloodTest bloodTest = BloodTest.byid(up.reference_id);
+                if (bloodTest != null) {
+                    entryId = firstMatchingBloodTestEntryId(nightscoutService.findEntryByDateAndType(apiSecret, bloodTest.timestamp, "mbg").execute(), bloodTest.mgdl);
+                }
+            }
+
+            if (entryId != null && entryId.length() == 24) {
+                final Response<ResponseBody> r = nightscoutService.deleteEntry(apiSecret, entryId).execute();
+                if (!r.isSuccessful()) {
+                    throw new UploaderException(r.message(), r.code());
+                } else {
+                    up.completed(THIS_QUEUE);
+                    Log.d(TAG, "Success for RESTAPI bloodtest delete: " + up.reference_uuid + " _id: " + entryId);
+                }
+            } else {
+                Log.wtf(TAG, "Couldn't find a reference _id for bloodtest uuid: " + up.reference_uuid + " got: " + entryId);
+                up.completed(THIS_QUEUE);
+            }
+        }
+    }
+
+    private String firstIdFromResponse(final Response<ResponseBody> response) throws Exception {
+        if (!response.isSuccessful()) {
+            throw new UploaderException(response.message(), response.code());
+        }
+        return firstIdFromArray(new JSONArray(response.body().string()), 0);
+    }
+
+    private String firstMatchingBloodTestEntryId(final Response<ResponseBody> response, final double mgdl) throws Exception {
+        if (!response.isSuccessful()) {
+            throw new UploaderException(response.message(), response.code());
+        }
+        final JSONArray jsonArray = new JSONArray(response.body().string());
+        for (int i = 0; i < jsonArray.length(); i++) {
+            final JSONObject entry = jsonArray.getJSONObject(i);
+            if (entry.has("mbg") && JoH.roundDouble(entry.getDouble("mbg"), 2) == JoH.roundDouble(mgdl, 2)) {
+                return firstIdFromArray(jsonArray, i);
+            }
+        }
+        return null;
+    }
+
+    private String firstIdFromArray(final JSONArray jsonArray, final int index) throws JSONException {
+        if (jsonArray.length() <= index) return null;
+        return jsonArray.getJSONObject(index).getString("_id");
     }
 
 
