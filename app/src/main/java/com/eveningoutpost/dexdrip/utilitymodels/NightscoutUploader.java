@@ -772,12 +772,29 @@ public class NightscoutUploader {
                 continue;
             }
 
+            final BloodTest bloodTest = BloodTest.byid(up.reference_id);
+            if (bloodTest != null && bloodTest.source != null && bloodTest.source.contains(VIA_NIGHTSCOUT_TREATMENTS_TAG)) {
+                final String treatmentId = nightscoutIdFromTreatmentDelete(nightscoutService, apiSecret, up.reference_uuid);
+                if (treatmentId != null && treatmentId.length() == 24) {
+                    final Response<ResponseBody> r = nightscoutService.deleteTreatment(apiSecret, treatmentId).execute();
+                    if (!r.isSuccessful()) {
+                        throw new UploaderException(r.message(), r.code());
+                    } else {
+                        up.completed(THIS_QUEUE);
+                        Log.d(TAG, "Success for RESTAPI bloodtest treatment delete: " + up.reference_uuid + " _id: " + treatmentId);
+                    }
+                } else {
+                    Log.wtf(TAG, "Couldn't find a treatment _id for bloodtest uuid: " + up.reference_uuid + " got: " + treatmentId);
+                    up.completed(THIS_QUEUE);
+                }
+                continue;
+            }
+
             String entryId = up.reference_uuid != null && up.reference_uuid.length() == 24 ? up.reference_uuid : null;
             if (entryId == null && up.reference_uuid != null) {
                 entryId = firstIdFromResponse(nightscoutService.findEntryByUUID(apiSecret, up.reference_uuid).execute());
             }
             if (entryId == null) {
-                final BloodTest bloodTest = BloodTest.byid(up.reference_id);
                 if (bloodTest != null) {
                     entryId = firstMatchingBloodTestEntryId(nightscoutService.findEntryByDateAndType(apiSecret, bloodTest.timestamp, "mbg").execute(), bloodTest.mgdl);
                 }
@@ -796,6 +813,12 @@ public class NightscoutUploader {
                 up.completed(THIS_QUEUE);
             }
         }
+    }
+
+    private String nightscoutIdFromTreatmentDelete(final NightscoutService nightscoutService, final String apiSecret, final String uuid) throws Exception {
+        if (uuid == null) return null;
+        if (uuid.length() == 24) return uuid;
+        return firstIdFromResponse(nightscoutService.findTreatmentByUUID(apiSecret, uuid).execute());
     }
 
     private String firstIdFromResponse(final Response<ResponseBody> response) throws Exception {
