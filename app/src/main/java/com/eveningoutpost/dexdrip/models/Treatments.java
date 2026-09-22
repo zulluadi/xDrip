@@ -373,6 +373,20 @@ public class Treatments extends Model {
         return treatment;
     }
 
+    public static synchronized Treatments update_note_by_uuid(String uuid, String note) {
+        final Treatments treatment = byuuid(uuid);
+        if (treatment == null) {
+            Log.e(TAG, "Cannot update treatment note, uuid not found: " + uuid);
+            return null;
+        }
+
+        treatment.notes = note;
+        // A local edit must be uploaded even when the treatment was downloaded from Nightscout.
+        treatment.enteredBy = XDRIP_TAG;
+        treatment.save();
+        pushTreatmentSync(treatment, false, null);
+        return treatment;
+    }
     static void createForTest(long timestamp, double insulin) {
         fixUpTable();
         val treatment = new Treatments();
@@ -1438,6 +1452,5 @@ public class Treatments extends Model {
         return notes != null && notes.startsWith("Priming");
     }
 }
-
 
 
