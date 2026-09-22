@@ -40,6 +40,9 @@ public class NightscoutFollow {
     private static final String TAG = "NightscoutFollow";
 
     private static final boolean D = true;
+    // Request enough treatment history to reconcile local Nightscout-origin treatments against deletions.
+    // Without an explicit count, Nightscout may return only a small default page and hide older deletes.
+    private static final int TREATMENT_DOWNLOAD_COUNT = 150;
 
     private static Nightscout service;
 
@@ -56,7 +59,7 @@ public class NightscoutFollow {
         Call<List<Entry>> getEntriesSince(@Header("api-secret") String secret, @Query("count") int count, @Query(value = "find[date][$gt]", encoded = true) long sinceMs, @Query("rr") String rr);
 
         @GET("/api/v1/treatments")
-        Call<ResponseBody> getTreatments(@Header("api-secret") String secret);
+        Call<ResponseBody> getTreatments(@Header("api-secret") String secret, @Query("count") int count);
 
         @GET("/api/v1/devicestatus.json?count=1")
         Call<List<DeviceStatus>> getDeviceStatus(@Header("api-secret") String secret);
@@ -123,7 +126,7 @@ public class NightscoutFollow {
             if (treatmentDownloadEnabled()) {
                 if (JoH.ratelimit("nsfollow-treatment-download", 60)) {
                     try {
-                        getService().getTreatments(session.url.getHashedSecret()).enqueue(session.treatmentsCallback);
+                        getService().getTreatments(session.url.getHashedSecret(), TREATMENT_DOWNLOAD_COUNT).enqueue(session.treatmentsCallback);
                     } catch (Exception e) {
                         UserError.Log.e(TAG, "Exception in treatments work() " + e);
                         msg("Nightscout follow treatments error: " + e);
@@ -161,7 +164,6 @@ public class NightscoutFollow {
         UserError.Log.d(TAG, "Instance reset");
         CollectionServiceStarter.restartCollectionServiceBackground();
     }
-
     @VisibleForTesting
     static void applyDeviceStatus(final DeviceStatus ds) {
         final Integer uploaderBat = resolveUploaderBattery(ds);
