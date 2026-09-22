@@ -155,8 +155,8 @@ public class TreatmentsSyncTest extends RobolectricTestWithConfig {
         try {
             final long oldTime = Instant.now().minusSeconds(600).toEpochMilli();
             final long newTime = Instant.now().toEpochMilli();
-            final BloodTest oldBloodTest = BloodTest.createLocalOnly(oldTime, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TAG, "bt-old-kept");
-            final BloodTest newBloodTest = BloodTest.createLocalOnly(newTime, 111, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TAG, "bt-new-deleted");
+            final BloodTest oldBloodTest = BloodTest.createLocalOnly(oldTime, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, "bt-old-kept");
+            final BloodTest newBloodTest = BloodTest.createLocalOnly(newTime, 111, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, "bt-new-deleted");
 
             final String response = "[{\"_id\":\"bt-old-kept\",\"uuid\":\"bt-old-kept\",\"eventType\":\"BG Check\",\"enteredBy\":\"remote\",\"created_at\":\""
                     + DateUtil.toISOString(oldTime)
@@ -180,7 +180,7 @@ public class TreatmentsSyncTest extends RobolectricTestWithConfig {
 
         try {
             final long time = Instant.now().toEpochMilli();
-            final BloodTest bloodTest = BloodTest.createLocalOnly(time, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TAG, "bt-updated");
+            final BloodTest bloodTest = BloodTest.createLocalOnly(time, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, "bt-updated");
 
             final String response = "[{\"_id\":\"bt-updated\",\"uuid\":\"bt-updated\",\"eventType\":\"BG Check\",\"enteredBy\":\"remote\",\"created_at\":\""
                     + DateUtil.toISOString(time)
@@ -204,7 +204,7 @@ public class TreatmentsSyncTest extends RobolectricTestWithConfig {
         try {
             final long bloodTestTime = Instant.now().toEpochMilli();
             final long treatmentTime = Instant.now().minusSeconds(600).toEpochMilli();
-            final BloodTest bloodTest = BloodTest.createLocalOnly(bloodTestTime, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TAG, "entry-bt-kept");
+            final BloodTest bloodTest = BloodTest.createLocalOnly(bloodTestTime, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG, "entry-bt-kept");
 
             final String response = "[{\"_id\":\"ns-treatment\",\"uuid\":\"ns-treatment\",\"eventType\":\"Meal Bolus\",\"enteredBy\":\"remote\",\"created_at\":\""
                     + DateUtil.toISOString(treatmentTime)
@@ -213,6 +213,31 @@ public class TreatmentsSyncTest extends RobolectricTestWithConfig {
             NightscoutTreatments.processTreatmentResponse(response);
 
             assertThat(BloodTest.byUUID(bloodTest.uuid)).isNotNull();
+        } finally {
+            Treatments.delete_all();
+            BloodTest.cleanup(-100000);
+        }
+    }
+
+    @Test
+    public void nightscoutTreatmentDownloadWithBloodTestsKeepsEntryBloodTest() throws Exception {
+        Treatments.delete_all();
+        BloodTest.cleanup(-100000);
+
+        try {
+            final long entryBloodTestTime = Instant.now().toEpochMilli();
+            final long treatmentBloodTestTime = Instant.now().minusSeconds(600).toEpochMilli();
+            final BloodTest entryBloodTest = BloodTest.createLocalOnly(entryBloodTestTime, 85, "Maia xDrip " + NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG, "entry-bt-kept");
+            final BloodTest treatmentBloodTest = BloodTest.createLocalOnly(treatmentBloodTestTime, 101, "remote " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, "treatment-bt-kept");
+
+            final String response = "[{\"_id\":\"treatment-bt-kept\",\"uuid\":\"treatment-bt-kept\",\"eventType\":\"BG Check\",\"enteredBy\":\"remote\",\"created_at\":\""
+                    + DateUtil.toISOString(treatmentBloodTestTime)
+                    + "\",\"glucoseType\":\"Finger\",\"glucose\":101,\"units\":\"mg/dl\"}]";
+
+            NightscoutTreatments.processTreatmentResponse(response);
+
+            assertThat(BloodTest.byUUID(entryBloodTest.uuid)).isNotNull();
+            assertThat(BloodTest.byUUID(treatmentBloodTest.uuid)).isNotNull();
         } finally {
             Treatments.delete_all();
             BloodTest.cleanup(-100000);
