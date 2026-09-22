@@ -1446,5 +1446,3 @@ public class Treatments extends Model {
         return notes != null && notes.startsWith("Priming");
     }
 }
-
-
