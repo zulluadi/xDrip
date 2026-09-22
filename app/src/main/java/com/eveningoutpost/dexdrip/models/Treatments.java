@@ -24,6 +24,7 @@ import com.eveningoutpost.dexdrip.models.UserError.Log;
 import com.eveningoutpost.dexdrip.R;
 import com.eveningoutpost.dexdrip.services.SyncService;
 import com.eveningoutpost.dexdrip.utilitymodels.Constants;
+import com.eveningoutpost.dexdrip.utilitymodels.NightscoutUploader;
 import com.eveningoutpost.dexdrip.utilitymodels.Pref;
 import com.eveningoutpost.dexdrip.utilitymodels.PumpStatus;
 import com.eveningoutpost.dexdrip.utilitymodels.UndoRedo;
@@ -381,6 +382,8 @@ public class Treatments extends Model {
         }
 
         treatment.notes = note;
+        // A local edit must be uploaded even when the treatment was downloaded from Nightscout.
+        treatment.enteredBy = XDRIP_TAG;
         treatment.save();
         pushTreatmentSync(treatment, false, null);
         return treatment;
@@ -766,7 +769,12 @@ public class Treatments extends Model {
 
                 if ((dupe_treatment.uuid != null) && (mytreatment.uuid != null) && (dupe_treatment.uuid.equals(mytreatment.uuid)) && (mytreatment.notes != null)) {
 
-                    if ((dupe_treatment.notes == null) || (dupe_treatment.notes.length() < mytreatment.notes.length())) {
+                    final boolean editedNightscoutTreatment = XDRIP_TAG.equals(mytreatment.enteredBy)
+                            && dupe_treatment.enteredBy != null
+                            && dupe_treatment.enteredBy.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG);
+                    if ((dupe_treatment.notes == null)
+                            || (editedNightscoutTreatment && !mytreatment.notes.equals(dupe_treatment.notes))
+                            || (!editedNightscoutTreatment && dupe_treatment.notes.length() < mytreatment.notes.length())) {
                         dupe_treatment.notes = mytreatment.notes;
                         fixUpTable();
                         dupe_treatment.save();

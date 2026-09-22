@@ -69,6 +69,96 @@ public class TreatmentsSyncTest extends RobolectricTestWithConfig {
     }
 
     @Test
+    public void editingNightscoutCarbNoteMarksTreatmentForUpload() {
+        Treatments.delete_all();
+        try {
+            final String nightscoutId = "0123456789abcdef01234567";
+            final Treatments imported = Treatments.create(25, 0, Instant.now().toEpochMilli(), nightscoutId);
+            imported.enteredBy = "AndroidAPS " + NightscoutUploader.VIA_NIGHTSCOUT_TAG;
+            imported.save();
+
+            final Treatments edited = Treatments.update_note_by_uuid(nightscoutId, "Lunch");
+
+            assertThat(edited.uuid).isEqualTo(nightscoutId);
+            assertThat(edited.carbs).isEqualTo(25.0);
+            assertThat(edited.notes).isEqualTo("Lunch");
+            assertThat(edited.enteredBy).isEqualTo(Treatments.XDRIP_TAG);
+            assertThat(Treatments.byuuid(nightscoutId).enteredBy).isEqualTo(Treatments.XDRIP_TAG);
+        } finally {
+            Treatments.delete_all();
+        }
+    }
+
+    @Test
+    public void pushedTreatmentReplacesNoteWithShorterEdit() {
+        Treatments.delete_all();
+        try {
+            final long time = Instant.now().toEpochMilli();
+            final Treatments treatment = Treatments.create(25, 0, time, "shared-treatment");
+            treatment.notes = "Lunch with dessert";
+            treatment.enteredBy = "AndroidAPS " + NightscoutUploader.VIA_NIGHTSCOUT_TAG;
+            treatment.save();
+
+            final String update = "{\"uuid\":\"shared-treatment\",\"timestamp\":" + time
+                    + ",\"carbs\":25,\"enteredBy\":\"xdrip\",\"notes\":\"Lunch\"}";
+            Treatments.pushTreatmentFromJson(update);
+
+            assertThat(Treatments.byuuid("shared-treatment").notes).isEqualTo("Lunch");
+        } finally {
+            Treatments.delete_all();
+        }
+    }
+
+    @Test
+    public void pushedTreatmentKeepsLongerNoteForOtherSources() {
+        Treatments.delete_all();
+        try {
+            final long time = Instant.now().toEpochMilli();
+            final Treatments treatment = Treatments.create(25, 0, time, "shared-treatment");
+            treatment.notes = "Lunch with dessert";
+            treatment.save();
+
+            final String update = "{\"uuid\":\"shared-treatment\",\"timestamp\":" + time
+                    + ",\"carbs\":25,\"enteredBy\":\"AndroidAPS\",\"notes\":\"Lunch\"}";
+            Treatments.pushTreatmentFromJson(update);
+
+            assertThat(Treatments.byuuid("shared-treatment").notes).isEqualTo("Lunch with dessert");
+        } finally {
+            Treatments.delete_all();
+        }
+    }
+
+    @Test
+    public void nightscoutDownloadReplacesExistingCarbNote() throws Exception {
+        Treatments.delete_all();
+        BloodTest.cleanup(-100000);
+        try {
+            final long time = Instant.now().toEpochMilli();
+            final String nightscoutId = "0123456789abcdef01234567";
+            final Treatments treatment = Treatments.create(25, 0, time, nightscoutId);
+            treatment.notes = "Lunch with dessert";
+            treatment.enteredBy = "AndroidAPS " + NightscoutUploader.VIA_NIGHTSCOUT_TAG;
+            treatment.save();
+
+            final String response = "[{\"_id\":\"" + nightscoutId + "\",\"uuid\":\"" + nightscoutId
+                    + "\",\"eventType\":\"Meal Bolus\",\"enteredBy\":\"xdrip\",\"created_at\":\""
+                    + DateUtil.toISOString(time) + "\",\"carbs\":25,\"insulin\":0,\"notes\":\"Lunch\"}]";
+            NightscoutTreatments.processTreatmentResponse(response);
+
+            assertThat(Treatments.byuuid(nightscoutId).notes).isEqualTo("Lunch");
+
+            final String aapsResponse = response.replace("\"enteredBy\":\"xdrip\"", "\"enteredBy\":\"AndroidAPS\"")
+                    .replace("\"notes\":\"Lunch\"", "\"notes\":\"Coffee\"");
+            NightscoutTreatments.processTreatmentResponse(aapsResponse);
+
+            assertThat(Treatments.byuuid(nightscoutId).notes).isEqualTo("Lunch \u2192 Coffee");
+        } finally {
+            Treatments.delete_all();
+            BloodTest.cleanup(-100000);
+        }
+    }
+
+    @Test
     public void nightscoutDownloadRemovesMissingNightscoutTreatment() throws Exception {
         Treatments.delete_all();
         BloodTest.cleanup(-100000);

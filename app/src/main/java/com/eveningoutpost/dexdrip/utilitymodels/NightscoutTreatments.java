@@ -208,8 +208,10 @@ public class NightscoutTreatments {
                                 UserError.Log.d(TAG, "Treatment with uuid: " + uuid + " / " + nightscout_id + " already exists");
                             if (notes == null) notes = "";
                             if (existing.notes == null) existing.notes = "";
+                            final boolean editedNightscoutTreatment = from_xdrip && existing.enteredBy != null
+                                    && existing.enteredBy.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG);
                             if ((existing.carbs != carbs) || (existing.insulin != insulin) || ((existing.timestamp / Constants.SECOND_IN_MS) != (timestamp / Constants.SECOND_IN_MS))
-                                    || (!existing.notes.contains(notes))) {
+                                    || (editedNightscoutTreatment ? !existing.notes.equals(notes) : !existing.notes.contains(notes))) {
                                 UserError.Log.ueh(TAG, "Treatment changes from Nightscout: " + carbs + " Insulin: " + insulin + " timestamp: " + JoH.dateTimeText(timestamp) + " " + notes + " " + " vs " + existing.carbs + " " + existing.insulin + " " + JoH.dateTimeText(existing.timestamp) + " " + existing.notes);
                                 existing.carbs = carbs;
                                 existing.insulin = insulin;
@@ -217,7 +219,9 @@ public class NightscoutTreatments {
                                     existing.setInsulinJSON(injections);
                                 existing.timestamp = timestamp;
                                 existing.created_at = DateUtil.toISOString(timestamp);
-                                if (existing.notes.length() > 0) {
+                                if (editedNightscoutTreatment) {
+                                    existing.notes = notes;
+                                } else if (existing.notes.length() > 0) {
                                     existing.notes += " \u2192 " + notes;
                                 } else {
                                     existing.notes = notes;
