@@ -367,6 +367,8 @@
     <string name="when">when (HHMM)</string>
     <string name="speak_your_treatment">Speak your treatment e.g.\nx.x units insulin / xx grams carbs</string>
     <string name="speech_recognition_is_not_supported">Speech recognition is not supported</string>
+    <string name="speech_language">Speech Language</string>
+    <string name="summary_speech_language">Language used for treatment and note speech input</string>
     <string name="treatment_note">Treatment Note</string>
     <string name="accessibility_description">xDrip uses the Accessibility feature just to adjust the screen when the device is locked. This is likely only useful if you have a phone with the Always On Display feature and have it enabled. xDrip does not interact with Android in any other way.</string>
     <string name="could_not_export_database">Could not export Database :(</string>
