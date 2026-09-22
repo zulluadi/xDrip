@@ -19,6 +19,8 @@
         android:layout_marginLeft="5dp"
         android:layout_marginRight="5dp"
         android:layout_marginTop="10dp"
+        android:layout_marginBottom="5dp"
+        android:minHeight="44dp"
         android:background="@drawable/tick_thing"
         android:fontFamily="sans-serif-condensed"
         android:gravity="center"
@@ -30,7 +32,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginBottom="10dp"
-        android:layout_weight="0.7"
+        android:layout_weight="1"
         android:orientation="vertical">
 
         <LinearLayout
@@ -43,7 +45,7 @@
                 android:id="@+id/one_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/one"
                 android:textSize="20sp" />
@@ -52,7 +54,7 @@
                 android:id="@+id/two_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/two"
                 android:textSize="20sp" />
@@ -61,7 +63,7 @@
                 android:id="@+id/three_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/three"
                 android:textSize="20sp" />
@@ -77,7 +79,7 @@
                 android:id="@+id/four_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/four"
                 android:textSize="20sp" />
@@ -86,7 +88,7 @@
                 android:id="@+id/five_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/five"
                 android:textSize="20sp" />
@@ -95,7 +97,7 @@
                 android:id="@+id/six_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/six"
                 android:textSize="20sp" />
@@ -111,7 +113,7 @@
                 android:id="@+id/seven_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/seven"
                 android:textSize="20sp" />
@@ -120,7 +122,7 @@
                 android:id="@+id/eight_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/eight"
                 android:textSize="20sp" />
@@ -129,7 +131,7 @@
                 android:id="@+id/nine_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/nine"
                 android:textSize="20sp" />
@@ -146,7 +148,7 @@
                 android:id="@+id/star_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/mdot"
                 android:textSize="20sp" />
@@ -155,7 +157,7 @@
                 android:id="@+id/zero_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/zero"
                 android:textSize="20sp" />
@@ -164,7 +166,7 @@
                 android:id="@+id/backspace_button"
                 style="@style/KeypadButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:text="@string/backarrow"
                 android:textSize="20sp" />
@@ -272,40 +274,67 @@
     </TableRow>
 
     <LinearLayout
-        android:id="@+id/insulinTypesSection"
+        android:id="@+id/treatment_extra_input_section"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_weight="0.05"
-        android:visibility="gone"
-        android:gravity="center_horizontal">
+        android:layout_height="80dp"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
 
-        <Button
-            android:id="@+id/multi_button1"
-            style="@style/KeypadButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="special1"
-            android:textSize="12sp" />
+        <EditText
+            android:id="@+id/carb_description_edit_text"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginLeft="5dp"
+            android:layout_marginRight="5dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/keypad_note_background"
+            android:fontFamily="sans-serif"
+            android:hint="@string/note"
+            android:inputType="textCapSentences"
+            android:maxLines="1"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:singleLine="true"
+            android:textColor="@android:color/white"
+            android:textColorHint="#b3ffffff"
+            android:textSize="16sp"
+            android:visibility="gone" />
 
-        <Button
-            android:id="@+id/multi_button2"
-            style="@style/KeypadButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="special2"
-            android:textSize="12sp" />
+        <LinearLayout
+            android:id="@+id/insulinTypesSection"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:visibility="gone">
 
-        <Button
-            android:id="@+id/multi_button3"
-            style="@style/KeypadButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="special3"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/multi_button1"
+                style="@style/KeypadButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="special1"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/multi_button2"
+                style="@style/KeypadButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="special2"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/multi_button3"
+                style="@style/KeypadButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="special3"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>
