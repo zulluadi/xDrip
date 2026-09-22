@@ -14,6 +14,8 @@ public class Entry extends BaseMessage {
     @Expose
     public String _id;
     @Expose
+    public String uuid;
+    @Expose
     public double date;
     @Expose
     public String dateString;
@@ -25,6 +27,8 @@ public class Entry extends BaseMessage {
     public String direction;
     @Expose
     public double filtered;
+    @Expose
+    public double mbg;
     @Expose
     public int noise;
     @Expose
@@ -61,4 +65,3 @@ public class Entry extends BaseMessage {
         return -1;
     }
 }
-
