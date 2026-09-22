@@ -18,6 +18,7 @@ import android.view.SurfaceControlViewHost;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.FrameLayout;
 import android.widget.RemoteViews;
 
@@ -304,6 +305,11 @@ public class AlwaysOnDisplayService extends AccessibilityService {
             int screenMaxY = 0;
 
             for (val window : list) {
+                // Our widget is not part of the AOD content we need to avoid.
+                if (window.getType() == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY
+                        && "xDrip Always On".contentEquals(window.getTitle() != null ? window.getTitle() : "")) {
+                    continue;
+                }
                 window.getBoundsInScreen(rect);
                 screenMaxY = Math.max(screenMaxY, rect.bottom);
 
@@ -315,11 +321,13 @@ public class AlwaysOnDisplayService extends AccessibilityService {
                     val children = root.getChildCount();
                     for (int i = 0; i < children; i++) {
                         val child = root.getChild(i);
+                        if (child == null) continue;
                         child.getBoundsInScreen(rect);
-                        if (child.getClassName().equals(LAYOUT)) {
+                        if (child.getClassName() != null && LAYOUT.contentEquals(child.getClassName())) {
                             val gchildren = child.getChildCount();
                             for (int j = 0; j < gchildren; j++) {
                                 val gchild = child.getChild(j);
+                                if (gchild == null) continue;
                                 gchild.getBoundsInScreen(rect);
                                 if (rect.top != 0 || (rect.bottom < 200)) {
                                     bf.addBlockWithMerge(rect.top, rect.bottom);
@@ -329,7 +337,9 @@ public class AlwaysOnDisplayService extends AccessibilityService {
                     }
 
                 } else {
-                    UserError.Log.e(TAG, "Cannot get root view");
+                    // Windows can disappear or become inaccessible while the display changes state.
+                    // Keep positioning with the available nodes and the display-size fallback.
+                    if (D) UserError.Log.d(TAG, "Window root unavailable: " + window.getId());
                 }
             }
             UserError.Log.d(TAG, bf.toString());
