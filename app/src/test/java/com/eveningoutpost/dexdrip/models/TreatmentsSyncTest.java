@@ -66,4 +66,24 @@ public class TreatmentsSyncTest extends RobolectricTestWithConfig {
 
     }
 
+    @Test
+    public void editingNightscoutCarbNoteMarksTreatmentForUpload() {
+        Treatments.delete_all();
+        try {
+            final String nightscoutId = "0123456789abcdef01234567";
+            final Treatments imported = Treatments.create(25, 0, Instant.now().toEpochMilli(), nightscoutId);
+            imported.enteredBy = "AndroidAPS " + NightscoutUploader.VIA_NIGHTSCOUT_TAG;
+            imported.save();
+
+            final Treatments edited = Treatments.update_note_by_uuid(nightscoutId, "Lunch");
+
+            assertThat(edited.uuid).isEqualTo(nightscoutId);
+            assertThat(edited.carbs).isEqualTo(25.0);
+            assertThat(edited.notes).isEqualTo("Lunch");
+            assertThat(edited.enteredBy).isEqualTo(Treatments.XDRIP_TAG);
+            assertThat(Treatments.byuuid(nightscoutId).enteredBy).isEqualTo(Treatments.XDRIP_TAG);
+        } finally {
+            Treatments.delete_all();
+        }
+    }
 }
