@@ -9,6 +9,7 @@ import com.eveningoutpost.dexdrip.RobolectricTestWithConfig;
 import com.eveningoutpost.dexdrip.models.BgReading;
 import com.eveningoutpost.dexdrip.models.BloodTest;
 import com.eveningoutpost.dexdrip.models.Calibration;
+import com.eveningoutpost.dexdrip.models.Treatments;
 import com.google.common.hash.Hashing;
 
 import org.json.JSONArray;
@@ -182,6 +183,58 @@ public class NightscoutUploaderCallerTest extends RobolectricTestWithConfig {
     }
 
     @Test
+    public void uploadRest_failedTreatmentRemainsPendingAndCanBeRetried() throws Exception {
+        prefs.edit()
+                .putBoolean("cloud_storage_api_enable", true)
+                .putString("cloud_storage_api_base", baseUrl())
+                .putBoolean("cloud_storage_api_download_enable", false)
+                .commit();
+        Pref.setBoolean("cloud_storage_api_enable", true);
+        Pref.setBoolean("send_treatments_to_nightscout", true);
+
+        Treatments treatment = new Treatments();
+        treatment.carbs = 6;
+        treatment.timestamp = System.currentTimeMillis();
+        treatment.created_at = com.eveningoutpost.dexdrip.models.DateUtil.toISOString(treatment.timestamp);
+        treatment.uuid = java.util.UUID.randomUUID().toString();
+        treatment.enteredBy = "xdrip";
+        treatment.notes = "Dextroza";
+        treatment.save();
+        UploaderQueue insert = UploaderQueue.newEntry("insert", treatment);
+        assertThat(insert).isNotNull();
+
+        server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                if (request.getPath().startsWith("/api/v1/treatments")) {
+                    return new MockResponse().setResponseCode(503);
+                }
+                return new MockResponse().setResponseCode(200)
+                        .setBody("{\"status\":\"ok\",\"version\":\"14.0\"}");
+            }
+        });
+        NightscoutUploader uploader = new NightscoutUploader(
+                org.robolectric.RuntimeEnvironment.application);
+        assertThat(uploader.uploadRest(Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList())).isFalse();
+        assertThat(UploaderQueue.getPendingbyType("Treatments", UploaderQueue.NIGHTSCOUT_RESTAPI))
+                .isNotEmpty();
+        assertThat(findRequestByPath("/api/v1/treatments", "PUT")).isNotNull();
+
+        server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return new MockResponse().setResponseCode(200)
+                        .setBody("{\"status\":\"ok\",\"version\":\"14.0\"}");
+            }
+        });
+        assertThat(uploader.uploadRest(Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList())).isTrue();
+        assertThat(UploaderQueue.getPendingbyType("Treatments", UploaderQueue.NIGHTSCOUT_RESTAPI))
+                .isEmpty();
+    }
+
+    @Test
     public void uploadRest_whenDisabled_sendsNoHttpRequests() throws Exception {
         // :: Setup
         prefs.edit()
@@ -241,11 +294,15 @@ public class NightscoutUploaderCallerTest extends RobolectricTestWithConfig {
      * would block until {@code takeRequest} times out.
      */
     private RecordedRequest findRequestByPath(String pathPrefix) throws InterruptedException {
+        return findRequestByPath(pathPrefix, "POST");
+    }
+
+    private RecordedRequest findRequestByPath(String pathPrefix, String method) throws InterruptedException {
         for (int i = 0; i < 10; i++) {
             final RecordedRequest req = server.takeRequest(2, TimeUnit.SECONDS);
             if (req == null) return null;
             if (req.getPath() != null && req.getPath().startsWith(pathPrefix)
-                    && "POST".equals(req.getMethod())) {
+                    && method.equals(req.getMethod())) {
                 return req;
             }
         }
