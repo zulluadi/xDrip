@@ -1686,6 +1686,9 @@ public class BgGraphBuilder {
                                 float yPosition = yPositions.first;
                                 yPosition = clampNonGlucoseY(yPosition + panCompensationOffset);
                                 pv.set((double)treatment.timestamp / FUZZER, yPosition);
+                                if (pv instanceof PointValueExtended) {
+                                    ((PointValueExtended) pv).setUUID(treatment.uuid);
+                                }
                                 //pv.setPlumbPos(yPositions.second);
                                 iconValues.add(pv);
                                 lastIconTimestamp = treatment.timestamp;
@@ -1704,6 +1707,8 @@ public class BgGraphBuilder {
                         pv.real_timestamp = treatment.timestamp;
                         if (treatment.isPenSyncedDose()) {
                             pv.setType(PointValueExtended.AdjustableDose).setUUID(treatment.uuid);
+                        } else {
+                            pv.setUUID(treatment.uuid);
                         }
                         String mylabel = "";
                         if (treatment.insulin > 0) {
@@ -2498,13 +2503,14 @@ public class BgGraphBuilder {
                             v -> DoseAdjustDialog.show(callerActivity, fuuid), callerActivity);
                     break;
                 default:
+                    final boolean editTreatmentNote = fuuid.length() > 0;
                     final View.OnClickListener mOnClickListener = new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            Home.startHomeWithExtra(xdrip.getAppContext(), Home.CREATE_TREATMENT_NOTE, time.toString(), "-1"); // Let's not enter a y position to avoid having to worry about the BG units
+                            Home.startHomeWithExtra(xdrip.getAppContext(), Home.CREATE_TREATMENT_NOTE, time.toString(), "-1", editTreatmentNote ? fuuid : ""); // Let's not enter a y position to avoid having to worry about the BG units
                         }
                     };
-                    Home.snackBar(R.string.add_note, message, mOnClickListener, callerActivity);
+                    Home.snackBar(editTreatmentNote ? R.string.edit_note : R.string.add_note, message, mOnClickListener, callerActivity);
                     break;
             }
         }
