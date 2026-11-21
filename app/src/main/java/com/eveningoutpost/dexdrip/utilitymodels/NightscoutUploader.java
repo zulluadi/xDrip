@@ -611,12 +611,14 @@ public class NightscoutUploader {
             }
         } catch (Exception e) {
             Log.e(TAG, "Exception uploading REST API treatments: ", e);
-            if (e.getMessage().equals("Not Found")) {
+            if ("Not Found".equals(e.getMessage())) {
                 final String msg = "Please ensure careportal plugin is enabled on nightscout for treatment upload!";
                 Log.wtf(TAG, msg);
                 Home.toaststaticnext(msg);
                 handleRestFailure(msg);
             }
+            // Keep the batch pending when a treatment upload fails.
+            throw e;
         }
         deleteBloodTests(nightscoutService, secret, queuedItems, THIS_QUEUE);
         // TODO we may want to check nightscout version before trying to upload!!
