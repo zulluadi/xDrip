@@ -14,6 +14,48 @@ import static com.google.common.truth.Truth.assertThat;
 
 public class TreatmentsSyncTest extends RobolectricTestWithConfig {
 
+    @Test
+    public void nightscoutIgnoresEmptyNotesWithoutDoses() throws Exception {
+        Treatments.delete_all();
+        try {
+            final String createdAt = DateUtil.toISOString(Instant.now().toEpochMilli());
+            final String response = "[{\"_id\":\"empty-note\",\"created_at\":\"" + createdAt
+                    + "\",\"carbs\":0,\"insulin\":0,\"notes\":\"\"},"
+                    + "{\"_id\":\"blank-note\",\"created_at\":\"" + createdAt
+                    + "\",\"carbs\":0,\"insulin\":0,\"notes\":\"   \"}]";
+
+            assertThat(NightscoutTreatments.processTreatmentResponse(response)).isFalse();
+            assertThat(NightscoutTreatments.processTreatmentResponse(response)).isFalse();
+            assertThat(Treatments.last()).isNull();
+            assertThat(org.robolectric.shadows.ShadowLog.getLogsForTag("NightscoutTreatments")
+                    .stream().anyMatch(log -> log.msg.startsWith("New Treatment from Nightscout:"))).isFalse();
+        } finally {
+            Treatments.delete_all();
+        }
+    }
+
+    @Test
+    public void nightscoutPreservesRealNotesAndDosesWithEmptyNotes() throws Exception {
+        Treatments.delete_all();
+        try {
+            final long time = Instant.now().toEpochMilli();
+            final String response = "[{\"_id\":\"real-note\",\"created_at\":\"" + DateUtil.toISOString(time)
+                    + "\",\"carbs\":0,\"insulin\":0,\"notes\":\"Exercise\"},"
+                    + "{\"_id\":\"real-dose\",\"created_at\":\"" + DateUtil.toISOString(time - 600000)
+                    + "\",\"carbs\":15,\"insulin\":1,\"notes\":\"\"}]";
+
+            assertThat(NightscoutTreatments.processTreatmentResponse(response)).isTrue();
+            assertThat(Treatments.byuuid("real-note").notes).isEqualTo("Exercise");
+            assertThat(Treatments.byuuid("real-note").carbs).isEqualTo(0);
+            assertThat(Treatments.byuuid("real-note").insulin).isEqualTo(0);
+            assertThat(Treatments.byuuid("real-dose").carbs).isEqualTo(15);
+            assertThat(Treatments.byuuid("real-dose").insulin).isEqualTo(1);
+            assertThat(NightscoutTreatments.processTreatmentResponse(response)).isFalse();
+        } finally {
+            Treatments.delete_all();
+        }
+    }
+
     public class TreatmentsCompat {
         @Expose
         public long timestamp;
