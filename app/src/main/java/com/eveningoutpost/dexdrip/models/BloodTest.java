@@ -94,7 +94,11 @@ public class BloodTest extends Model {
     }
 
     public void removeState(long flag) {
+        final boolean deletingValidBloodTest = (flag & STATE_VALID) != 0 && (state & STATE_VALID) != 0;
         state &= ~flag;
+        if (deletingValidBloodTest && UploaderQueue.newEntry("delete", this) != null) {
+            SyncService.startSyncService(3000);
+        }
         save();
     }
 
@@ -131,6 +135,14 @@ public class BloodTest extends Model {
     }
 
     public static BloodTest create(long timestamp_ms, double mgdl, String source, String suggested_uuid) {
+        return create(timestamp_ms, mgdl, source, suggested_uuid, true);
+    }
+
+    public static BloodTest createLocalOnly(long timestamp_ms, double mgdl, String source, String suggested_uuid) {
+        return create(timestamp_ms, mgdl, source, suggested_uuid, false);
+    }
+
+    private static BloodTest create(long timestamp_ms, double mgdl, String source, String suggested_uuid, boolean upload) {
 
         if ((timestamp_ms == 0) || (mgdl == 0)) {
             UserError.Log.e(TAG, "Either timestamp or mgdl is zero - cannot create reading");
@@ -161,7 +173,7 @@ public class BloodTest extends Model {
             bt.state = STATE_VALID;
             bt.source = source;
             bt.saveit();
-            if (UploaderQueue.newEntry("insert", bt) != null) {
+            if (upload && UploaderQueue.newEntry("insert", bt) != null) {
                 SyncService.startSyncService(3000); // sync in 3 seconds
             }
 
@@ -178,6 +190,14 @@ public class BloodTest extends Model {
             UserError.Log.d(TAG, "Not creating new reading as timestamp is too close");
         }
         return null;
+    }
+
+    public static void delete_by_uuid_local_only(String uuid) {
+        final BloodTest bloodTest = byUUID(uuid);
+        if (bloodTest != null) {
+            bloodTest.delete();
+            Home.staticRefreshBGCharts();
+        }
     }
 
     public static BloodTest createFromCal(double bg, double timeoffset, String source) {
@@ -574,4 +594,3 @@ public class BloodTest extends Model {
         patched = true;
     }
 }
-

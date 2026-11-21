@@ -14,6 +14,8 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.eveningoutpost.dexdrip.models.Treatments.pushTreatmentSyncToWatch;
@@ -32,6 +34,11 @@ public class NightscoutTreatments {
         boolean new_data = false;
 
         final JSONArray jsonArray = new JSONArray(response);
+        final Set<String> remoteTreatmentIds = new HashSet<>();
+        final Set<String> remoteBloodTestIds = new HashSet<>();
+        long minCollectionTimestamp = Long.MAX_VALUE;
+        long minTreatmentTimestamp = Long.MAX_VALUE;
+        long minBloodTestTimestamp = Long.MAX_VALUE;
         for (int i = 0; i < jsonArray.length(); i++) {
             final JSONObject tr = (JSONObject) jsonArray.get(i);
 
@@ -45,6 +52,11 @@ public class NightscoutTreatments {
             }
             if (d)
                 UserError.Log.d(TAG, "event: " + etype + "_id: " + nightscout_id + " uuid:" + uuid);
+
+            final long recordTimestamp = getCreatedAtTimestamp(tr);
+            if (recordTimestamp > 0) {
+                minCollectionTimestamp = Math.min(minCollectionTimestamp, recordTimestamp);
+            }
 
             boolean from_xdrip = false;
             try {
@@ -66,16 +78,20 @@ public class NightscoutTreatments {
                             UserError.Log.d(TAG, "Skipping baulked bloodtest nightscout id: " + nightscout_id);
                             continue;
                         }
-                        final BloodTest existing = BloodTest.byUUID(uuid);
+                        remoteBloodTestIds.add(uuid);
+                        remoteBloodTestIds.add(nightscout_id);
+                        minBloodTestTimestamp = Math.min(minBloodTestTimestamp, recordTimestamp);
+                        BloodTest existing = BloodTest.byUUID(nightscout_id);
                         if (existing == null) {
-                            final long timestamp = DateUtil.tolerantFromISODateString(tr.getString("created_at")).getTime();
-                            double mgdl = JoH.tolerantParseDouble(tr.getString("glucose"), 0d);
-                            if (tr.getString("units").equals("mmol"))
-                                mgdl = mgdl * Constants.MMOLL_TO_MGDL;
-                            final BloodTest bt = BloodTest.create(timestamp, mgdl, tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TAG);
+                            existing = BloodTest.byUUID(uuid);
+                        }
+                        final long timestamp = recordTimestamp;
+                        double mgdl = JoH.tolerantParseDouble(tr.getString("glucose"), 0d);
+                        if (tr.getString("units").equals("mmol"))
+                            mgdl = mgdl * Constants.MMOLL_TO_MGDL;
+                        if (existing == null) {
+                            final BloodTest bt = BloodTest.createLocalOnly(timestamp, mgdl, tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG, nightscout_id);
                             if (bt != null) {
-                                bt.uuid = uuid; // override random uuid with nightscout one
-                                bt.saveit();
                                 new_data = true;
                                 UserError.Log.ueh(TAG, "Received new Bloodtest data from Nightscout: " + BgGraphBuilder.unitized_string_with_units_static(mgdl) + " @ " + JoH.dateTimeText(timestamp));
                             } else {
@@ -85,6 +101,16 @@ public class NightscoutTreatments {
                         } else {
                             if (d)
                                 UserError.Log.d(TAG, "Already a bloodtest with uuid: " + uuid);
+                            final String source = tr.getString("enteredBy") + " " + NightscoutUploader.VIA_NIGHTSCOUT_TREATMENTS_TAG;
+                            if ((existing.mgdl != mgdl) || (existing.timestamp != timestamp) || ((existing.state & BloodTest.STATE_VALID) == 0) || (existing.source == null) || (!existing.source.equals(source))) {
+                                UserError.Log.ueh(TAG, "Bloodtest changes from Nightscout: " + BgGraphBuilder.unitized_string_with_units_static(mgdl) + " @ " + JoH.dateTimeText(timestamp) + " vs " + BgGraphBuilder.unitized_string_with_units_static(existing.mgdl) + " @ " + JoH.dateTimeText(existing.timestamp));
+                                existing.mgdl = mgdl;
+                                existing.timestamp = timestamp;
+                                existing.source = source;
+                                existing.state |= BloodTest.STATE_VALID;
+                                existing.saveit();
+                                new_data = true;
+                            }
                         }
                     } else {
                         if (JoH.quietratelimit("blood-test-type-finger", 2)) {
@@ -126,8 +152,11 @@ public class NightscoutTreatments {
                 notes = null;
 
             if ((carbs > 0) || (insulin > 0) || (notes != null)) {
-                final long timestamp = DateUtil.tolerantFromISODateString(tr.getString("created_at")).getTime();
+                remoteTreatmentIds.add(uuid);
+                remoteTreatmentIds.add(nightscout_id);
+                final long timestamp = recordTimestamp;
                 if (timestamp > 0) {
+                    minTreatmentTimestamp = Math.min(minTreatmentTimestamp, timestamp);
                     if (d)
                         UserError.Log.d(TAG, "Treatment: Carbs: " + carbs + " Insulin: " + insulin + " timestamp: " + timestamp);
                     Treatments existing = Treatments.byuuid(nightscout_id);
@@ -205,6 +234,65 @@ public class NightscoutTreatments {
                 }
             }
         }
+        if (removeMissingNightscoutTreatments(remoteTreatmentIds, minTreatmentTimestamp, minCollectionTimestamp, jsonArray.length() == 0)) {
+            new_data = true;
+        }
+        if (!remoteBloodTestIds.isEmpty() && removeMissingNightscoutBloodTests(remoteBloodTestIds, minBloodTestTimestamp, minCollectionTimestamp, jsonArray.length() == 0)) {
+            new_data = true;
+        }
         return new_data;
+    }
+
+    private static long getCreatedAtTimestamp(final JSONObject tr) {
+        try {
+            return DateUtil.tolerantFromISODateString(tr.getString("created_at")).getTime();
+        } catch (JSONException e) {
+            return 0;
+        }
+    }
+
+    private static long reconcileStartTimestamp(final Set<String> remoteIds, final long minTypeTimestamp, final long minCollectionTimestamp, final boolean emptyResponse) {
+        if (!remoteIds.isEmpty()) return minTypeTimestamp;
+        return emptyResponse ? 0 : minCollectionTimestamp;
+    }
+
+    private static boolean removeMissingNightscoutTreatments(final Set<String> remoteTreatmentIds, final long minTreatmentTimestamp, final long minCollectionTimestamp, final boolean emptyResponse) {
+        final long startTimestamp = reconcileStartTimestamp(remoteTreatmentIds, minTreatmentTimestamp, minCollectionTimestamp, emptyResponse);
+        if (startTimestamp == Long.MAX_VALUE) return false;
+        final List<Treatments> localTreatments;
+        localTreatments = Treatments.latestForGraph(Integer.MAX_VALUE, startTimestamp, JoH.tsl() + Constants.DAY_IN_MS);
+
+        boolean removed = false;
+        for (final Treatments treatment : localTreatments) {
+            if (treatment.uuid == null || treatment.enteredBy == null || !treatment.enteredBy.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG)) {
+                continue;
+            }
+            if (!remoteTreatmentIds.contains(treatment.uuid)) {
+                UserError.Log.ueh(TAG, "Removing Treatment deleted from Nightscout: " + JoH.dateTimeText(treatment.timestamp) + " uuid: " + treatment.uuid);
+                Treatments.delete_by_uuid_local_only(treatment.uuid);
+                removed = true;
+            }
+        }
+        return removed;
+    }
+
+    private static boolean removeMissingNightscoutBloodTests(final Set<String> remoteBloodTestIds, final long minBloodTestTimestamp, final long minCollectionTimestamp, final boolean emptyResponse) {
+        final long startTimestamp = reconcileStartTimestamp(remoteBloodTestIds, minBloodTestTimestamp, minCollectionTimestamp, emptyResponse);
+        if (startTimestamp == Long.MAX_VALUE) return false;
+        final List<BloodTest> localBloodTests = BloodTest.latestForGraph(Integer.MAX_VALUE, startTimestamp, JoH.tsl() + Constants.DAY_IN_MS);
+
+        boolean removed = false;
+        for (final BloodTest bloodTest : localBloodTests) {
+            if (bloodTest.uuid == null || bloodTest.source == null || !bloodTest.source.contains(NightscoutUploader.VIA_NIGHTSCOUT_TAG)
+                    || bloodTest.source.contains(NightscoutUploader.VIA_NIGHTSCOUT_ENTRIES_TAG)) {
+                continue;
+            }
+            if (!remoteBloodTestIds.contains(bloodTest.uuid)) {
+                UserError.Log.ueh(TAG, "Removing Bloodtest deleted from Nightscout: " + JoH.dateTimeText(bloodTest.timestamp) + " uuid: " + bloodTest.uuid);
+                BloodTest.delete_by_uuid_local_only(bloodTest.uuid);
+                removed = true;
+            }
+        }
+        return removed;
     }
 }
