@@ -81,6 +81,8 @@ public class StatsActivity extends ActivityWithMenu {
     public static final String SHOW_STATISTICS_Rel_SD = "show_statistics_relsd";
     public static final String SHOW_STATISTICS_GVI = "show_statistics_gvi";
     public static final String SHOW_STATISTICS_PGS = "show_statistics_pgs";
+    private static final String LAST_STATISTICS_TAB = "statistics-last-page";
+    private static final int DEFAULT_STATISTICS_TAB = 2;
     private static final String TAG = "Statistics";
 
     @Override
@@ -171,7 +173,6 @@ public class StatsActivity extends ActivityWithMenu {
             indicationDots[i].setTextSize(12);
             indicator.addView(indicationDots[i], new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        indicationDots[0].setText("\u26AB");
         mViewPager = (ViewPager) findViewById(pager);
         mViewPager.setAdapter(mStatisticsPageAdapter);
         mViewPager.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
@@ -187,10 +188,8 @@ public class StatsActivity extends ActivityWithMenu {
                 //    swipeInfoNotNeeded = true;
                 //}
 
-                for (int i = 0; i < indicationDots.length; i++) {
-                    indicationDots[i].setText("\u25EF"); //U+2B24
-                }
-                indicationDots[position].setText("\u26AB");
+                updateIndicatorDots(position);
+                Pref.setInt(LAST_STATISTICS_TAB, position);
             }
 
             @Override
@@ -198,7 +197,22 @@ public class StatsActivity extends ActivityWithMenu {
 
             }
         });
-        mViewPager.setCurrentItem(2);
+        final int selectedTab = getSavedStatisticsTab();
+        mViewPager.setCurrentItem(selectedTab);
+        updateIndicatorDots(selectedTab);
+    }
+
+    private int getSavedStatisticsTab() {
+        final int savedTab = Pref.getInt(LAST_STATISTICS_TAB, DEFAULT_STATISTICS_TAB);
+        if ((savedTab >= 0) && (savedTab < mStatisticsPageAdapter.getCount())) return savedTab;
+        return DEFAULT_STATISTICS_TAB;
+    }
+
+    private void updateIndicatorDots(final int position) {
+        for (int i = 0; i < indicationDots.length; i++) {
+            indicationDots[i].setText("\u25EF");
+        }
+        indicationDots[position].setText("\u26AB");
     }
 
     void setButtonColors() {
