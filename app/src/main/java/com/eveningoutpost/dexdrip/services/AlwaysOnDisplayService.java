@@ -8,13 +8,17 @@ import android.content.IntentFilter;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
+import android.os.Binder;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.SurfaceControl;
+import android.view.SurfaceControlViewHost;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.FrameLayout;
 import android.widget.RemoteViews;
 
@@ -49,9 +53,13 @@ public class AlwaysOnDisplayService extends AccessibilityService {
     private static final String LAYOUT = "android.widget.FrameLayout";
     private static final String TAG = "AlwaysOnDisplay";
     private static final boolean D = false;
+    private static final int SURFACE_OVERLAY_MIN_SDK = 36;
     private volatile long lastScreenOn = 1;
     private FrameLayout frameLayout;
     private View aodView;
+    private SurfaceControlViewHost surfaceViewHost;
+    private SurfaceControlViewHost.SurfacePackage surfacePackage;
+    private SurfaceControl surfaceControl;
 
     private final WindowManager.LayoutParams layoutParams = new WindowManager.LayoutParams();
 
@@ -128,6 +136,10 @@ public class AlwaysOnDisplayService extends AccessibilityService {
 
     void addLayout() {
         try {
+            if (usesSurfaceOverlay()) {
+                addSurfaceLayout();
+                return;
+            }
             final WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
             if (windowManager == null) {
                 UserError.Log.wtf(TAG, "Cannot get window manager to inject layout");
@@ -136,7 +148,32 @@ public class AlwaysOnDisplayService extends AccessibilityService {
             windowManager.addView(aodView, layoutParams);
         } catch (Exception e) {
             UserError.Log.e(TAG, "Unable to add layout " + e);
+            if (usesSurfaceOverlay()) {
+                removeSurfaceLayout();
+            }
         }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private void addSurfaceLayout() {
+        final Display display = getDefaultDisplay();
+        if (display == null) {
+            UserError.Log.wtf(TAG, "Cannot get display to attach accessibility overlay");
+            return;
+        }
+
+        final Context displayContext = createDisplayContext(display);
+        surfaceViewHost = new SurfaceControlViewHost(displayContext, display, new Binder());
+        surfaceViewHost.setView(aodView, layoutParams.width, layoutParams.height);
+        surfacePackage = surfaceViewHost.getSurfacePackage();
+        if (surfacePackage == null) {
+            UserError.Log.wtf(TAG, "Cannot get surface package for accessibility overlay");
+            removeSurfaceLayout();
+            return;
+        }
+        surfaceControl = surfacePackage.getSurfaceControl();
+        attachAccessibilityOverlayToDisplay(display.getDisplayId(), surfaceControl);
+        positionSurfaceLayout();
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -145,9 +182,38 @@ public class AlwaysOnDisplayService extends AccessibilityService {
     }
 
     void removeLayout() {
+        if (usesSurfaceOverlay()
+                && (surfaceControl != null || surfacePackage != null || surfaceViewHost != null)) {
+            removeSurfaceLayout();
+            return;
+        }
         if (this.aodView != null) {
             removeLayout(this.aodView);
         }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private void removeSurfaceLayout() {
+        if (surfaceControl != null) {
+            try (final SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                transaction.reparent(surfaceControl, null).apply();
+            } catch (Exception e) {
+                UserError.Log.e(TAG, "Unable to detach surface layout: " + e);
+            }
+        }
+        surfaceControl = null;
+        if (surfacePackage != null) {
+            surfacePackage.release();
+            surfacePackage = null;
+        }
+        if (surfaceViewHost != null) {
+            surfaceViewHost.release();
+            surfaceViewHost = null;
+        }
+    }
+
+    private boolean usesSurfaceOverlay() {
+        return Build.VERSION.SDK_INT >= SURFACE_OVERLAY_MIN_SDK;
     }
 
     void removeLayout(final View aodView) {
@@ -185,6 +251,11 @@ public class AlwaysOnDisplayService extends AccessibilityService {
         return false;
     }
 
+    private Display getDefaultDisplay() {
+        final DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        return displayManager != null ? displayManager.getDisplay(Display.DEFAULT_DISPLAY) : null;
+    }
+
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private synchronized void refreshView() {
@@ -202,7 +273,11 @@ public class AlwaysOnDisplayService extends AccessibilityService {
         aodView.setBackgroundColor(Color.TRANSPARENT);
         if (D) aodView.setBackgroundColor(Color.RED);
 
-        removeLayout(oldview);
+        if (usesSurfaceOverlay()) {
+            removeSurfaceLayout();
+        } else {
+            removeLayout(oldview);
+        }
         addLayout();
         rejigLayout();
 
@@ -230,6 +305,11 @@ public class AlwaysOnDisplayService extends AccessibilityService {
             int screenMaxY = 0;
 
             for (val window : list) {
+                // Our widget is not part of the AOD content we need to avoid.
+                if (window.getType() == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY
+                        && "xDrip Always On".contentEquals(window.getTitle() != null ? window.getTitle() : "")) {
+                    continue;
+                }
                 window.getBoundsInScreen(rect);
                 screenMaxY = Math.max(screenMaxY, rect.bottom);
 
@@ -241,11 +321,13 @@ public class AlwaysOnDisplayService extends AccessibilityService {
                     val children = root.getChildCount();
                     for (int i = 0; i < children; i++) {
                         val child = root.getChild(i);
+                        if (child == null) continue;
                         child.getBoundsInScreen(rect);
-                        if (child.getClassName().equals(LAYOUT)) {
+                        if (child.getClassName() != null && LAYOUT.contentEquals(child.getClassName())) {
                             val gchildren = child.getChildCount();
                             for (int j = 0; j < gchildren; j++) {
                                 val gchild = child.getChild(j);
+                                if (gchild == null) continue;
                                 gchild.getBoundsInScreen(rect);
                                 if (rect.top != 0 || (rect.bottom < 200)) {
                                     bf.addBlockWithMerge(rect.top, rect.bottom);
@@ -255,7 +337,9 @@ public class AlwaysOnDisplayService extends AccessibilityService {
                     }
 
                 } else {
-                    UserError.Log.e(TAG, "Cannot get root view");
+                    // Windows can disappear or become inaccessible while the display changes state.
+                    // Keep positioning with the available nodes and the display-size fallback.
+                    if (D) UserError.Log.d(TAG, "Window root unavailable: " + window.getId());
                 }
             }
             UserError.Log.d(TAG, bf.toString());
@@ -268,10 +352,34 @@ public class AlwaysOnDisplayService extends AccessibilityService {
             }
 
             layoutParams.y = bf.findRandomAvailablePositionWithFailSafe(layoutParams.height, screenMaxY);
-            windowManager.updateViewLayout(aodView, layoutParams);
+            if (usesSurfaceOverlay()) {
+                positionSurfaceLayout();
+            } else {
+                windowManager.updateViewLayout(aodView, layoutParams);
+            }
         } catch (Exception e) {
             UserError.Log.e(TAG, "Error with rejig display: " + e);
         }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private void positionSurfaceLayout() {
+        if (surfaceControl == null) {
+            return;
+        }
+        final DisplayMetrics dm = new DisplayMetrics();
+        final Display display = getDefaultDisplay();
+        if (display == null) {
+            return;
+        }
+        display.getRealMetrics(dm);
+        final float x = (dm.widthPixels - layoutParams.width) / 2f;
+        final SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
+        transaction.setPosition(surfaceControl, x, layoutParams.y)
+                .setLayer(surfaceControl, Integer.MAX_VALUE)
+                .setVisibility(surfaceControl, true)
+                .apply();
+        transaction.close();
     }
 
     final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
